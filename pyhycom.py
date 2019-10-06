@@ -80,13 +80,13 @@ def getBathymetry(filename,dims,undef):
     return field
 
 
-def getField(field,filename,undef,layers=None,i_range=None,j_range=None):
+def getField(field,filename,undef,layers=None,x_range=None,y_range=None):
     """
     A function to read hycom raw binary files (regional.grid.a, archv.*.a and forcing.*.a supported),
     and interpret them as numpy arrays.
 
     ## BK added layers option to get a set of specified layers instead of the full file.
-    ## layers is zero based. Leave it as None (or set it to []) to get all layers. 
+    ## layers is zero based. Leave it as None (or set it to []) to get all layers.
     """
     import numpy as np
     from os.path import getsize
@@ -116,15 +116,31 @@ def getField(field,filename,undef,layers=None,i_range=None,j_range=None):
         field = np.zeros((kdm,jdm,idm))
         if layers is None:
             layers = []
-        for k in range(kdm):
+
+        ## Figure out how many layers I need to read from the file.
+        if len(layers) > 0:
+            kmax = max(np.max(layers),kdm-1)
+        else:
+            kmax = kdm
+
+        ## Read through layers sequentially.
+        for k in range(kmax):
             file.seek(int(fieldAddresses[k]),0) # Move to address
             if len(layers) < 1:
                 field[k,:,:] = np.reshape(np.fromfile(file,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
             else:
                 if k in layers:   ## Levels are 1 to kdm. Python indices are zero based.
                     field[k,:,:] = np.reshape(np.fromfile(file,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
+
+        ## Keep only tha layers that were specified. (The others would be all zeros.)
         if len(layers) > 0:
             field = field[layers,:,:]
+
+        if not x_range is None:
+            field = field[:,:,x_range]
+
+        if not y_range is None:
+            field = field[:,y_range,:]
 
     else: # 2-d field
         file.seek(int(fieldAddresses[0]),0)     # Move to address
