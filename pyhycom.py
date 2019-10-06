@@ -2,11 +2,11 @@
 pyhycom.py
 
 A Python interface to HYCOM files.
-""" 
+"""
 
 def getTextFile(filename):
     """
-    Returns a list where each element contains text from each line 
+    Returns a list where each element contains text from each line
     of given text file.
     """
     return [line.rstrip() for line in open(filename,'r').readlines()]
@@ -14,7 +14,7 @@ def getTextFile(filename):
 
 def getDims(filename):
     """
-    Returns HYCOM domain dimensions for a given 
+    Returns HYCOM domain dimensions for a given
     archive or regional.grid .a file.
     """
     f = getTextFile(filename[:-1]+'b')
@@ -78,15 +78,15 @@ def getBathymetry(filename,dims,undef):
     file.close()
     field[field>2**99] = undef
     return field
-    
 
-def getField(field,filename,undef,layers=[]):
+
+def getField(field,filename,undef,layers=None,i_range=None,j_range=None):
     """
     A function to read hycom raw binary files (regional.grid.a, archv.*.a and forcing.*.a supported),
     and interpret them as numpy arrays.
 
     ## BK added layers option to get a set of specified layers instead of the full file.
-    ## layers is zero based.
+    ## layers is zero based. Leave it as None (or set it to []) to get all layers. 
     """
     import numpy as np
     from os.path import getsize
@@ -114,16 +114,18 @@ def getField(field,filename,undef,layers=[]):
     # Read field records:
     if fieldAddresses.size == kdm: # 3-d field
         field = np.zeros((kdm,jdm,idm))
+        if layers is None:
+            layers = []
         for k in range(kdm):
             file.seek(int(fieldAddresses[k]),0) # Move to address
             if len(layers) < 1:
                 field[k,:,:] = np.reshape(np.fromfile(file,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
             else:
                 if k in layers:   ## Levels are 1 to kdm. Python indices are zero based.
-                    field[k,:,:] = np.reshape(np.fromfile(file,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()           
+                    field[k,:,:] = np.reshape(np.fromfile(file,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
         if len(layers) > 0:
             field = field[layers,:,:]
-        
+
     else: # 2-d field
         file.seek(int(fieldAddresses[0]),0)     # Move to address
         field = np.reshape(np.fromfile(file,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
@@ -140,7 +142,7 @@ def ab2nc(filename):
     #
     """
     A function that converts a given hycom binary .a file into an equivalent .nc file.
- 
+
     Module requirements: numpy,netCDF4,matplotlib.dates
     """
     #
@@ -164,7 +166,7 @@ def ab2nc(filename):
         #
         # Get field names:
         fields=[]
-        for line in file_content[3:]: 
+        for line in file_content[3:]:
             fields.append(line[0:4])
         #
         ncfile=Dataset(filename[:-1]+'nc','w',format='NETCDF3_CLASSIC') # Open file
@@ -283,7 +285,7 @@ def mixedLayerDepth(T,d,delT):
     profiles and temperature difference criterion.
     Uses linear interpolation to find mixed layer depth between
     two discrete levels. If criterion is not satisfied,
-    returns the last element of the depth list. 
+    returns the last element of the depth list.
 
     Input arguments:
     T    :: list of vertical temperature profile
