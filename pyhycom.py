@@ -3,6 +3,8 @@ pyhycom.py
 
 A Python interface to HYCOM files.
 """
+import numpy as np
+import os
 
 def getTextFile(filename):
     """
@@ -80,7 +82,7 @@ def getBathymetry(filename,dims,undef):
     return field
 
 
-def getField(field,filename,undef,layers=None,x_range=None,y_range=None):
+def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
     """
     A function to read hycom raw binary files (regional.grid.a, archv.*.a and forcing.*.a supported),
     and interpret them as numpy arrays.
@@ -151,6 +153,95 @@ def getField(field,filename,undef,layers=None,x_range=None,y_range=None):
     field[field>2**99] = undef
 
     return field
+
+def get_vertical_profiles_at_points(field_list,filename,points,undef=np.nan):
+
+    """
+    field_profile = get_vertical_profiles_at_points(field_list,filename,points,undef=np.nan,layers=None)
+
+    field_list is a list of field names to get. Alternatively, a string with a single field name.
+    filename is the .a file.
+    points is a 2D array or list of lists, with each row being a lon and lat.
+    It can be just [lon,lat] to get a single profile.
+
+    The script uses nearest neighbor interpolation. This avoids having to deal
+    with different vertical coordinates at adjacent points.
+
+    The function will return a dict containing 2D arrays for each variable.
+    """
+
+    from scipy.interpolate import NearestNDInterpolator
+
+    ## Handle field_list if it is just a string of a single field.
+    if not type(field_list) is list:
+        field_list = [field_list]
+    field_list = ['thknss'] + field_list
+
+    ## Handle points if only one point specified.
+    if not type(points[0]) is list:
+        points = [points]
+    points = np.array(points)
+
+    ## Get regional.grid.a file.
+    gridfilename = os.path.dirname(filename) + '/regional.grid.a'
+
+    ## Get lat/lon and bounds for the points.
+    min_lon = np.min(points[:,0])
+    max_lon = np.max(points[:,0])
+    min_lat = np.min(points[:,1])
+    max_lat = np.max(points[:,1])
+    lon = getField('plon', gridfilename, np.nan)
+    lat = getField('plat', gridfilename, np.nan)
+
+    ## Add buffer region of 1 deg, in case all the points specified are too close together
+    ## in which case, x_range and/or y_range may end up empty below.
+    x_range = [x for x in range(lon.shape[1]) if np.min(lon[:,x]) > min_lon-1.01 and np.max(lon[:,x]) < max_lon+1.01]
+    y_range = [x for x in range(lat.shape[0]) if np.min(lat[x,:]) > min_lat-1.01 and np.max(lat[x,:]) < max_lat+1.01]
+    lon = lon[y_range,:][:,x_range]
+    lat = lat[y_range,:][:,x_range]
+
+    ## Process each field.
+    field_profile_list = []
+    for field_name in field_list:
+        field_data = getField(field_name, filename, undef=undef, layers=None
+                    , x_range = x_range, y_range = y_range)
+
+        field_profile = np.zeros([field_data.shape[0],points.shape[0]])
+
+        for kk in range(field_data.shape[0]):
+            interp = NearestNDInterpolator((lon.flatten(),lat.flatten()),field_data[kk,:,:].flatten())
+            field_profile[kk,:] = interp([points[:,0],points[:,1]])
+
+        field_profile_list += [field_profile]
+
+    ## Get depth from thickness.
+    field_profile_list[0] /= 9806.0
+
+    depth_bottom = 1.0*field_profile_list[0] #/ 9806.0
+    for k in range(1, field_data.shape[0]):
+        depth_bottom[k,:] = depth_bottom[k-1,:] + depth_bottom[k,:]
+
+    depth = 0.0*depth_bottom
+    depth[0,:] = depth_bottom[0,:] / 2.0
+    for k in range(1, field_data.shape[0]):
+        depth[k,:] = 0.5*(depth_bottom[k-1,:] + depth_bottom[k,:])
+
+    FOUT={}
+    FOUT['depth_bottom_of_layer'] = depth_bottom
+    FOUT['depth_middle_of_layer'] = depth
+    FOUT['lon'] = 0.0*depth
+    FOUT['lat'] = 0.0*depth
+    for k in range(field_data.shape[0]):
+        FOUT['lon'][k,:] = points[:,0]
+        FOUT['lat'][k,:] = points[:,1]
+
+    for ii in range(len(field_list)):
+        FOUT[field_list[ii]] = field_profile_list[ii]
+
+    return FOUT
+
+
+
 #
 ########################################################################
 #
