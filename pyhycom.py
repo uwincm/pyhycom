@@ -157,7 +157,7 @@ def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
 def get_vertical_profiles_at_points(field_list,filename,points,undef=np.nan):
 
     """
-    field_profile = get_vertical_profiles_at_points(field_list,filename,points,undef=np.nan,layers=None)
+    F = get_vertical_profiles_at_points(field_list,filename,points,undef=np.nan)
 
     field_list is a list of field names to get. Alternatively, a string with a single field name.
     filename is the .a file.
@@ -210,7 +210,7 @@ def get_vertical_profiles_at_points(field_list,filename,points,undef=np.nan):
 
         for kk in range(field_data.shape[0]):
             interp = NearestNDInterpolator((lon.flatten(),lat.flatten()),field_data[kk,:,:].flatten())
-            field_profile[kk,:] = interp([points[:,0],points[:,1]])
+            field_profile[kk,:] = interp(points) #[points[:,0],points[:,1]])
 
         field_profile_list += [field_profile]
 
