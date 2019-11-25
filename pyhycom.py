@@ -242,6 +242,105 @@ def get_vertical_profiles_at_points(field_list,filename,points,undef=np.nan):
 
 
 
+
+def get_vertical_profiles(field_list,dir,trajectory,undef=np.nan, nz=41):
+
+    #(['temp','salin'],dir,trajectory,undef=np.nan)
+    """
+    F = get_vertical_profiles(field_list,dir,trajectory,undef=np.nan)
+
+    field_list is a list of field names to get. Alternatively, a string with a single field name.
+    filename is the .a file.
+
+    A trajectory dictionary has keys 'datetime','lon','lat'
+
+    nz is the number of layers to get.
+
+    The script uses nearest neighbor interpolation. This avoids having to deal
+    with different vertical coordinates at adjacent points.
+
+    The function will return a dict containing 2D arrays for each variable.
+    """
+
+    from scipy.interpolate import NearestNDInterpolator
+
+    ## Handle field_list if it is just a string of a single field.
+    if not type(field_list) is list:
+        field_list = [field_list]
+    field_list = ['thknss'] + field_list
+
+    ## Handle points if only one point specified.
+    points = np.array([trajectory['lon'].tolist(),trajectory['lat'].tolist()]).T
+
+    ## Get regional.grid.a file.
+    gridfilename = (dir + '/regional.grid.a')
+    filename = (dir + '/archv.2018_050_00.a')
+
+    ## Get lat/lon and bounds for the points.
+    min_lon = np.min(points[:,0])
+    max_lon = np.max(points[:,0])
+    min_lat = np.min(points[:,1])
+    max_lat = np.max(points[:,1])
+    lon = getField('plon', gridfilename, np.nan)
+    lat = getField('plat', gridfilename, np.nan)
+
+    ## Add buffer region of 1 deg, in case all the points specified are too close together
+    ## in which case, x_range and/or y_range may end up empty below.
+    x_range = [x for x in range(lon.shape[1]) if np.min(lon[:,x]) > min_lon-1.01 and np.max(lon[:,x]) < max_lon+1.01]
+    y_range = [x for x in range(lat.shape[0]) if np.min(lat[x,:]) > min_lat-1.01 and np.max(lat[x,:]) < max_lat+1.01]
+    lon = lon[y_range,:][:,x_range]
+    lat = lat[y_range,:][:,x_range]
+
+
+    ## Initialize fields.
+    field_profile_list = []
+    for field_name in field_list:
+        field_profile = np.zeros([nz,points.shape[0]])
+        field_profile_list += [field_profile]
+
+
+    ## Process each field at each time.
+    for tt in range(len(trajectory['datetime'])):
+        filename = trajectory['datetime'][tt].strftime(dir + '/archv.%Y_%j_%H.a')
+        print(filename)
+
+        ffff=-1
+        for field_name in field_list:
+            ffff+=1
+            field_data = getField(field_name, filename, undef=undef, layers=None
+                        , x_range = x_range, y_range = y_range)
+
+            for kk in range(nz):
+                interp = NearestNDInterpolator((lon.flatten(),lat.flatten()),field_data[kk,:,:].flatten())
+                field_profile_list[ffff][kk,tt] = interp(points[tt,:]) #[points[:,0],points[:,1]])
+
+    ## Get depth from thickness.
+    field_profile_list[0] /= 9806.0
+
+    depth_bottom = 1.0*field_profile_list[0] #/ 9806.0
+    for k in range(1, field_data.shape[0]):
+        depth_bottom[k,:] = depth_bottom[k-1,:] + depth_bottom[k,:]
+
+    depth = 0.0*depth_bottom
+    depth[0,:] = depth_bottom[0,:] / 2.0
+    for k in range(1, field_data.shape[0]):
+        depth[k,:] = 0.5*(depth_bottom[k-1,:] + depth_bottom[k,:])
+
+    FOUT={}
+    FOUT['depth_bottom_of_layer'] = depth_bottom
+    FOUT['depth_middle_of_layer'] = depth
+    FOUT['lon'] = 0.0*depth
+    FOUT['lat'] = 0.0*depth
+    for k in range(field_data.shape[0]):
+        FOUT['lon'][k,:] = points[:,0]
+        FOUT['lat'][k,:] = points[:,1]
+
+    for ii in range(len(field_list)):
+        FOUT[field_list[ii]] = field_profile_list[ii]
+
+    return FOUT
+
+
 #
 ########################################################################
 #
