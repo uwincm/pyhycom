@@ -7,8 +7,8 @@ Modified by Brandon Kerns at the University of Washington (bkerns@uw.edu)
 See the examples directory for example usage for a simulated transect
 along a track (e.g., ship, glider, saildrone) for a Pacific simulation.
 There is a script to download the example data, from
-https://orca.atmos.washington.edu/~bkerns/code/awovispy/data/
-(Total: 33 GB)
+https://orca.atmos.washington.edu/~bkerns/code/pyhycom/data/
+(Total: 86 GB (sorry!) TODO: Upload smaller subset of data)
 
 Many of the functions require regional.grid.[ab] to be present
 in the same directory.
