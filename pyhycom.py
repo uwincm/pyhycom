@@ -632,13 +632,10 @@ def ab2nc(filename):
             record=record+1
         ncfile.close() # Close file
         #
-#
-########################################################################
-#
 
-#
 ########################################################################
-#
+############### Mixed Layer Depth Functions ############################
+########################################################################
 
 def getMixedLayerDepth(filename, delT=0.2, delS=0.03, ref_depth=10):
     """
@@ -707,8 +704,6 @@ def mixedLayerDepthT(T,d,delT, ref_depth=10.0):
         else:
             return d[k-1]
     return d[len(T)-1]
-
-
 
 
 def mixedLayerDepthS(S,d,delS, ref_depth=10.0):
