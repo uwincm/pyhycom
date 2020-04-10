@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.colorbar
 from mpl_toolkits.basemap import Basemap
 from matplotlib.colors import BoundaryNorm, LinearSegmentedColormap
 from matplotlib.ticker import MaxNLocator
@@ -8,6 +9,7 @@ import cmocean
 
 from context import pyhycom
 
+plt.close('all')
 
 """
 This Python script creates the image "transect.png"
@@ -17,6 +19,8 @@ Test run it to make sure you get the file.
 See the "Set Trajectory" section below to edit the path.
 The data HYCOM data files can be downloaded from here:
 
+HYCOM DATA FILES FOR THIS EXAMPLE ARE ONLINE HERE:
+https://orca.atmos.washington.edu/~bkerns/code/awovispy/data/
 """
 
 def plot_map_background(plot_area = [-180, 180, -70, 70], ax = plt.gca()
@@ -79,7 +83,7 @@ def draw_color_bar(h, label='', fig = plt.gcf(), ax=plt.gca()):
 
 
 def calc_trajectory(speed, duration_hours, direction_ccw_from_east
-        , prev_trajectory=None, dt_start=None, lon_start=None, lat_start=None):
+        , prev_trajectory=None, dt_start=None, lon_start=None, lat_start=None, time_resolution_hours=1):
     ##
     ## A trajectory dictionary has keys 'datetime','lon','lat'
     ##
@@ -88,14 +92,14 @@ def calc_trajectory(speed, duration_hours, direction_ccw_from_east
 
     if prev_trajectory is None:
         lat_radians = lat_start * 3.14159 / 180.0
-        hours = range(int(duration_hours)+1)
+        hours = range(0,int(duration_hours)+1,int(time_resolution_hours))
         dt_track = [dt_start + dt.timedelta(hours=x) for x in hours]
         lon_track = np.array([lon_start + factor * np.cos(lat_radians) * speed * x * np.cos(direction_radians) for x in hours])
         lat_track = np.array([lat_start + factor * speed * x * np.sin(direction_radians) for x in hours])
     else:
         lat_radians = prev_trajectory['lat'][-1] * 3.14159 / 180.0
         dt_start = prev_trajectory['datetime'][-1]
-        hours = range(1,int(duration_hours)+1)
+        hours = range(int(time_resolution_hours),int(duration_hours)+1,int(time_resolution_hours))
         dt_new_track = [dt_start + dt.timedelta(hours=x) for x in hours]
         dt_track = prev_trajectory['datetime'] + dt_new_track
         lon_track = np.append(prev_trajectory['lon']
@@ -116,7 +120,7 @@ def calc_trajectory(speed, duration_hours, direction_ccw_from_east
 dir = '/home/orca/bkerns/models/uwincm-pacific-tropics-subtropics-2018/stitch_output'
 fn_maps = '/home/orca/bkerns/models/uwincm-pacific-tropics-subtropics-2018/stitch_output/archv.2018_050_00.a'
 fn_grid = '/home/orca/bkerns/models/uwincm-pacific-tropics-subtropics-2018/stitch_output/regional.grid.a'
-plot_area = [230,250,-6,10]   # [lon1, lon2, lat1, lat2], lon is 0-360 for this HYCOM run.
+plot_area = [152,172,-8,8]   # [lon1, lon2, lat1, lat2], lon is 0-360 for this HYCOM run.
 
 ## !!!!!! Initialize the trajectory you want. !!!!!!!
 """
@@ -129,12 +133,17 @@ Note: For this run, HYCOM longitudes are 0 - 360.
 ## Trajectory is a dictionary with fields datetime, lon, and lat.
 ## This code calls the calc_trajectory function above, but you can do it
 ## however you feel like.
-trajectory = {'datetime': [dt.datetime(2018,2,19,0,0,0)]
-            , 'lon': [360 - 120.5], 'lat': [4.5]}
+trajectory = {'datetime': [dt.datetime(2018,4,1,0,0,0)]
+            , 'lon': [166], 'lat': [0]}
 ##                          spd  hours direction   attach to this trajectory
-trajectory = calc_trajectory(5.0, 24, -90.0, prev_trajectory = trajectory)
-trajectory = calc_trajectory(5.0, 24, 0.0, prev_trajectory = trajectory)
 
+#trajectory = calc_trajectory(1.5, 48, 180.0, prev_trajectory = trajectory, time_resolution_hours=12)
+
+
+trajectory = calc_trajectory(1.5, 168, 180.0, prev_trajectory = trajectory, time_resolution_hours=1)
+trajectory = calc_trajectory(1.5, 24, 90.0, prev_trajectory = trajectory, time_resolution_hours=1)
+trajectory = calc_trajectory(1.5, 72, 0.0, prev_trajectory = trajectory, time_resolution_hours=1)
+print(trajectory)
 ################################################################################
 ## Read in the grid.
 lon = pyhycom.getField('plon', fn_grid, np.nan)
@@ -150,8 +159,8 @@ sss = pyhycom.getField("salin", fn_maps, np.NaN, layers=[0])[0,:,:]
 #points = np.array([trajectory['lon'].tolist(),trajectory['lat'].tolist()]).T.tolist()
 time_hours = np.array([(x - trajectory['datetime'][0]).total_seconds()/3600.0 for x in trajectory['datetime']])
 
-#F = pyhycom.get_vertical_profiles_at_points(['temp','salin'],dir,trajectory,undef=np.nan)
-F = pyhycom.get_vertical_profiles(['temp','salin'],dir,trajectory,undef=np.nan)
+F = pyhycom.get_vertical_profiles(['temp','salin','u-vel','v-vel'],dir,trajectory,undef=np.nan)
+G = pyhycom.get_wrf_surface_transect(['U10','V10','T2','PSFC'],dir,trajectory)
 time_hours2d, dum = np.meshgrid(time_hours, F['depth_middle_of_layer'][:,0])
 
 ################################################################################
@@ -163,43 +172,77 @@ time_hours2d, dum = np.meshgrid(time_hours, F['depth_middle_of_layer'][:,0])
 cmap00 = plt.cm.jet
 cmap0 = LinearSegmentedColormap.from_list('custom', cmap00(np.linspace(0.10, 1.0, 28)))
 cmap = cmap0
-levels = MaxNLocator(nbins=28).tick_values(14.0, 28.0)
+levels = MaxNLocator(nbins=34).tick_values(14.0, 31.0)
 norm = BoundaryNorm(levels, cmap0.N, clip=True)
 
 
-fig = plt.figure(figsize=(6.5,5.5))
-ax1 = fig.add_subplot(2,2,1)
+fig = plt.figure(figsize=(6.0,6.5))
+ax1 = fig.add_subplot(3,2,1)
 
 map1=plot_map_background(plot_area = plot_area, ax=ax1)
 
-H1 = plt.pcolormesh(lon, lat, sst
+H1 = plt.contourf(lon, lat, sst, levels=levels
                            , cmap = cmap
-                           , norm = norm)
+                           , norm = norm
+                           , extend='both'
+                           , vmin=levels[0], vmax=levels[-1],alpha=0.7)
 
 plt.plot(trajectory['lon'],trajectory['lat'],'k',linewidth=2.0)
 plt.text(trajectory['lon'][0],trajectory['lat'][0],'A')
 plt.text(trajectory['lon'][-1],trajectory['lat'][-1],'B')
 
 cbar = plt.colorbar(H1)
-cbar.set_ticks(np.arange(16, 28, 2))
+cbar.set_ticks(np.arange(16, 31, 2))
 
 ax1.set_title('Temperature')
 
+
+
+
+ax33 = fig.add_subplot(3,2,3)
+h1,=ax33.plot(time_hours2d[0,:], F['temp'][0,:], color='r',linewidth=1)
+h2,=ax33.plot(time_hours, G['T2']-273.15, color='orange',linewidth=1)
+ax33.set_ylim([24.0, 34.0])
+ax33.set_ylabel('[C]')
+cax, kw = matplotlib.colorbar.make_axes_gridspec(ax33)
+cax.set_visible(False)
+ax333 = ax33.twinx()
+wspd = np.sqrt(np.power(G['U10'],2) + np.power(G['V10'],2))
+h3,=ax333.plot(time_hours, wspd, color='k', linewidth=1)
+scale = np.nanmean(wspd)
+ax333.quiver(time_hours, 2.0 + 0*time_hours, G['U10'], G['V10'], color='k'
+        , width=0.012, headwidth=4, scale=4*scale, units='inches')
+ax333.set_ylim([0,20])
+ax333.set_ylabel('[m/s]')
+plt.legend([h1,h2,h3],['SST','2 m Tair','WSPD'],frameon=False, fontsize=8)
+
 ## Temp. Transect.
-ax3 = fig.add_subplot(2,2,3)
+ax3 = fig.add_subplot(3,2,5)
 H3 = plt.contourf(time_hours2d, F['depth_middle_of_layer'],F['temp'], levels=levels
                            , cmap = cmap
                            , norm = norm
-                           , extend='both')
+                           , extend='both'
+                           , vmin=levels[0], vmax=levels[-1],alpha=0.7)
+
+
+u_plot = F['u-vel'].copy()
+v_plot = F['v-vel'].copy()
+for ii in range(0,12,2):
+    u_plot[ii,:] = np.nan
+    v_plot[ii,:] = np.nan
+
+skipt=4*6
+plt.quiver(time_hours2d[:,::skipt]
+    , F['depth_middle_of_layer'][:,::skipt]
+    ,u_plot[:,::skipt], v_plot[:,::skipt]
+    , width=0.012, headwidth=4, scale=4.0, units='inches')
 
 cbar = plt.colorbar(H3)
-cbar.set_ticks(np.arange(16, 28, 2))
+cbar.set_ticks(np.arange(16, 31, 2))
 
-plt.text(0,5,'A')
-plt.text(45,5,'B')
 
-ax3.set_ylim([100,0])
-ax3.set_xlabel('Time [h]')
+ax3.set_ylim([300,0])
+ax3.set_xlabel('Time [h] (A --> B)')
 ax3.set_title('Temperature')
 
 
@@ -211,11 +254,13 @@ levels = MaxNLocator(nbins=15).tick_values(34.0, 35.5)
 norm_sss = BoundaryNorm(levels, cmap0.N, clip=True)
 
 
-ax2 = fig.add_subplot(2,2,2)
+ax2 = fig.add_subplot(3,2,2)
 map2=plot_map_background(plot_area = plot_area, ax=ax2)
-H2 = plt.pcolormesh(lon, lat, sss
+H2 = plt.contourf(lon, lat, sss, levels=levels
                            , cmap = cmap_sss
-                           , norm = norm_sss)
+                           , norm = norm_sss
+                           , extend='both'
+                           , vmin=levels[0], vmax=levels[-1],alpha=0.7)
 
 plt.plot(trajectory['lon'],trajectory['lat'],'k',linewidth=2.0)
 plt.text(trajectory['lon'][0],trajectory['lat'][0],'A')
@@ -226,21 +271,49 @@ cbar.set_ticks(np.arange(32,39, 1))
 
 ax2.set_title('Salinity')
 
-## Temp. Transect.
-ax4 = fig.add_subplot(2,2,4)
+
+ax44 = fig.add_subplot(3,2,4)
+h5,=ax44.plot(time_hours2d[0,:], F['salin'][0,:], color='b',linewidth=1)
+ax44.set_ylim([33.0, 36.0])
+ax44.set_ylabel('[PSU]')
+cax, kw = matplotlib.colorbar.make_axes_gridspec(ax44)
+cax.set_visible(False)
+ax444 = ax44.twinx()
+wspd = np.sqrt(np.power(G['U10'],2) + np.power(G['V10'],2))
+h4,=ax444.plot(time_hours, wspd, color='k', linewidth=1)
+scale = np.nanmean(wspd)
+ax444.quiver(time_hours, 2.0 + 0*time_hours, G['U10'], G['V10'], color='k'
+        , width=0.012, headwidth=4, scale=4*scale, units='inches')
+ax444.set_ylim([0,20])
+ax444.set_ylabel('[m/s]')
+plt.legend([h5,h4],['Salinity','WSPD'],frameon=False, fontsize=8)
+
+
+## Salinity. Transect.
+ax4 = fig.add_subplot(3,2,6)
 H4 = plt.contourf(time_hours2d, F['depth_middle_of_layer'],F['salin'], levels=levels
                            , cmap = cmap_sss
                            , norm = norm_sss
-                           , extend='both')
+                           , extend='both'
+                           , vmin=levels[0], vmax=levels[-1],alpha=0.7)
+
+u_plot = F['u-vel'].copy()
+v_plot = F['v-vel'].copy()
+for ii in range(0,12,2):
+    u_plot[ii,:] = np.nan
+    v_plot[ii,:] = np.nan
+
+skipt=4*6
+plt.quiver(time_hours2d[:,::skipt]
+    , F['depth_middle_of_layer'][:,::skipt]
+    ,u_plot[:,::skipt], v_plot[:,::skipt]
+    , width=0.012, headwidth=4, scale=4.0, units='inches')
 
 cbar= plt.colorbar(H4)
 cbar.set_ticks(np.arange(32,39, 1))
 
-plt.text(0,5,'A')
-plt.text(45,5,'B')
-
-ax4.set_ylim([100,0])
-ax4.set_xlabel('Time [h]')
+ax4.set_ylim([300,0])
+ax4.set_xlabel('Time [h] (A --> B)')
 ax4.set_title('Salinity')
 
 
