@@ -13,30 +13,28 @@ $WGET $HTTP/regional.depth.b
 ## HYCOM 3D data files.
 for ext in a.gz b txt
 do
-
-  for HH in 00 03 06 09 12 15 18 21
+  for HH in 00 06 12 18
   do
-
-    $WGET $HTTP/archv.2018_050_${HH}.$ext
-    $WGET $HTTP/archv.2018_051_${HH}.$ext
-
+    for DOY in {091..101}
+    do
+      $WGET $HTTP/archv.2018_${DOY}_${HH}.$ext
+      $WGET $HTTP/archv.2018_${DOY}_${HH}.$ext
+    done
   done
-
-  $WGET $HTTP/archv.2018_052_00.$ext
-
+  $WGET $HTTP/archv.2018_102_00.$ext
 done
 
 
 ## WRF files for including met fields.
-for HH in 00 03 06 09 12 15 18 21
+for HH in 00 06 12 18
 do
-
-  $WGET $HTTP/wrfout_d01_2018-02-19_${HH}:00:00
-  $WGET $HTTP/wrfout_d01_2018-02-20_${HH}:00:00
-
+  for DD in {01..11}
+  do
+    $WGET $HTTP/wrfout_d01_2018-04-${DD}_${HH}:00:00
+  done
 done
 
-$WGET $HTTP/wrfout_d01_2018-02-21_00:00:00
+$WGET $HTTP/wrfout_d01_2018-04-12_00:00:00
 
 
 echo 'Download complete.'
