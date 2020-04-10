@@ -5,13 +5,20 @@ Originally written by Milan Curcic (University of Miami).
 Modified by Brandon Kerns at the University of Washington (bkerns@uw.edu)
 
 See the examples directory for example usage for a simulated transect
-along a track (e.g., ship, glider, saildrone)
+along a track (e.g., ship, glider, saildrone) for a Pacific simulation.
+There is a script to download the example data, from
+https://orca.atmos.washington.edu/~bkerns/code/awovispy/data/
+(Total: 33 GB)
 
 Many of the functions require regional.grid.[ab] to be present
 in the same directory.
 
+Update April 2020: The functions can now handle gzipped .a files (.a.gz).
+Pass them to the functions as you would .a files.
+
 In the code, the functions have a documentaton section near the top.
 These documentation sections are reproduced below for the main functions.
+Note that filename is generally the .a (or .a.gz) file.
 
 ```Python
 def getDims(filename):
