@@ -243,7 +243,7 @@ def get_vertical_profiles_at_points(field_list,filename,points,undef=np.nan):
 
 
 
-def get_vertical_profiles(field_list,dir,trajectory,undef=np.nan, nz=41):
+def get_vertical_profiles(field_list,dir,trajectory,undef=np.nan, nz=41, atm_fields=None):
 
     #(['temp','salin'],dir,trajectory,undef=np.nan)
     """
@@ -339,6 +339,85 @@ def get_vertical_profiles(field_list,dir,trajectory,undef=np.nan, nz=41):
         FOUT[field_list[ii]] = field_profile_list[ii]
 
     return FOUT
+
+
+def get_wrf_surface_transect(field_list,dir,trajectory,undef=np.nan, DOM='d01'):
+
+    """
+    F = get_wrf_surface_transect(field_list,dir,trajectory,undef=np.nan)
+
+    field_list is a list of field names to get. Alternatively, a string with a single field name.
+    filename is the .a file.
+
+    A trajectory dictionary has keys 'datetime','lon','lat'
+
+    The script uses nearest neighbor interpolation. This avoids having to deal
+    with different vertical coordinates at adjacent points.
+
+    The function will return a dict containing 1D arrays for each variable.
+    """
+
+    from netCDF4 import Dataset
+    from scipy.interpolate import NearestNDInterpolator
+
+    ## Handle field_list if it is just a string of a single field.
+    if not type(field_list) is list:
+        field_list = [field_list]
+
+    ## Handle points if only one point specified.
+    points = np.array([trajectory['lon'].tolist(),trajectory['lat'].tolist()]).T
+
+
+    ## Get lat/lon and bounds for the points.
+    min_lon = np.min(points[:,0])
+    max_lon = np.max(points[:,0])
+    min_lat = np.min(points[:,1])
+    max_lat = np.max(points[:,1])
+
+
+    ## Initialize fields.
+    field_transect_list = []
+    for field_name in field_list:
+        field_transect = np.zeros(points.shape[0])
+        field_transect_list += [field_transect]
+
+
+    ## Process each field at each time.
+    for tt in range(len(trajectory['datetime'])):
+        filename = trajectory['datetime'][tt].strftime(dir + '/wrfout_'+DOM+'_%Y-%m-%d_%H:00:00')
+        print(filename)
+
+        DS=Dataset(filename)
+        lon = DS['XLONG'][:]
+        lat = DS['XLAT'][:]
+
+        ## Add buffer region of 1 deg, in case all the points specified are too close together
+        ## in which case, x_range and/or y_range may end up empty below.
+        #x_range = [x for x in range(lon.shape[1]) if np.min(lon[:,x]) > min_lon-1.01 and np.max(lon[:,x]) < max_lon+1.01]
+        #y_range = [x for x in range(lat.shape[0]) if np.min(lat[x,:]) > min_lat-1.01 and np.max(lat[x,:]) < max_lat+1.01]
+        #lon = lon[y_range,:][:,x_range]
+        #lat = lat[y_range,:][:,x_range]
+
+        ffff=-1
+        for field_name in field_list:
+            ffff+=1
+            field_data = DS[field_name][:]
+
+            interp = NearestNDInterpolator((lon.flatten(),lat.flatten()),field_data[0,:,:].flatten())
+            field_transect_list[ffff][tt] = interp(points[tt]) #[points[:,0],points[:,1]])
+        DS.close()
+
+    FOUT={}
+    FOUT['lon'] = 0.0*field_transect_list[0]
+    FOUT['lat'] = 0.0*field_transect_list[0]
+    FOUT['lon'] = points[:,0]
+    FOUT['lat'] = points[:,1]
+
+    for ii in range(len(field_list)):
+        FOUT[field_list[ii]] = field_transect_list[ii]
+
+    return FOUT
+
 
 
 #
