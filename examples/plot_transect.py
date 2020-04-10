@@ -20,7 +20,7 @@ See the "Set Trajectory" section below to edit the path.
 The data HYCOM data files can be downloaded from here:
 
 HYCOM DATA FILES FOR THIS EXAMPLE ARE ONLINE HERE:
-https://orca.atmos.washington.edu/~bkerns/code/awovispy/data/
+https://orca.atmos.washington.edu/~bkerns/code/awovispy/pyhycom/data/
 """
 
 def plot_map_background(plot_area = [-180, 180, -70, 70], ax = plt.gca()
@@ -117,15 +117,16 @@ def calc_trajectory(speed, duration_hours, direction_ccw_from_east
 ################################################################################
 
 ## !!!!!! Edit data paths with your system directories. !!!!!!
-dir = '/home/orca/bkerns/models/uwincm-pacific-tropics-subtropics-2018/stitch_output'
-fn_maps = '/home/orca/bkerns/models/uwincm-pacific-tropics-subtropics-2018/stitch_output/archv.2018_050_00.a'
-fn_grid = '/home/orca/bkerns/models/uwincm-pacific-tropics-subtropics-2018/stitch_output/regional.grid.a'
+dir = '/home/orca/bkerns/public_html/code/pyhycom/data'
+fn_maps = dir+'/archv.2018_091_00.a.gz'  ## Map has the initial time. "What you see before deploying"
+fn_grid = dir+'/regional.grid.a'
 plot_area = [152,172,-8,8]   # [lon1, lon2, lat1, lat2], lon is 0-360 for this HYCOM run.
 
 ## !!!!!! Initialize the trajectory you want. !!!!!!!
 """
-This example has the trajectory starting at 4.5 N, 120.5W, moving south at 5 m/s for a day,
-then moving east at 5 m/s for a day. add as many trajectory legs as you feel like.
+This example has the trajectory starting at EQ, 166E, moving west 1.5 m/s for 7 days,
+then moving north at 1.5 m/s for a day., the eastward at 1.5 m/s for 3 days.
+Add as many trajectory legs as you feel like.
 (For now, only integer hours are allowed)
 Note: For this run, HYCOM longitudes are 0 - 360.
 """
@@ -136,13 +137,10 @@ Note: For this run, HYCOM longitudes are 0 - 360.
 trajectory = {'datetime': [dt.datetime(2018,4,1,0,0,0)]
             , 'lon': [166], 'lat': [0]}
 ##                          spd  hours direction   attach to this trajectory
-
-#trajectory = calc_trajectory(1.5, 48, 180.0, prev_trajectory = trajectory, time_resolution_hours=12)
-
-
-trajectory = calc_trajectory(1.5, 168, 180.0, prev_trajectory = trajectory, time_resolution_hours=1)
-trajectory = calc_trajectory(1.5, 24, 90.0, prev_trajectory = trajectory, time_resolution_hours=1)
-trajectory = calc_trajectory(1.5, 72, 0.0, prev_trajectory = trajectory, time_resolution_hours=1)
+trajectory = calc_trajectory(1.5, 168, 180.0, prev_trajectory = trajectory, time_resolution_hours=6)
+trajectory = calc_trajectory(1.5, 24, 90.0, prev_trajectory = trajectory, time_resolution_hours=6)
+trajectory = calc_trajectory(1.5, 72, 0.0, prev_trajectory = trajectory, time_resolution_hours=6)
+print('Trajectory:')
 print(trajectory)
 ################################################################################
 ## Read in the grid.
@@ -156,7 +154,6 @@ sss = pyhycom.getField("salin", fn_maps, np.NaN, layers=[0])[0,:,:]
 ##
 
 ## Get trajectories from each file, as needed.
-#points = np.array([trajectory['lon'].tolist(),trajectory['lat'].tolist()]).T.tolist()
 time_hours = np.array([(x - trajectory['datetime'][0]).total_seconds()/3600.0 for x in trajectory['datetime']])
 
 F = pyhycom.get_vertical_profiles(['temp','salin','u-vel','v-vel'],dir,trajectory,undef=np.nan)
