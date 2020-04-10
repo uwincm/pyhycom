@@ -331,6 +331,7 @@ def get_vertical_profiles(field_list,dir,trajectory,undef=np.nan, nz=41, atm_fie
     The function will return a dict containing 2D arrays for each variable.
     """
 
+    import glob
     from scipy.interpolate import NearestNDInterpolator
 
     ## Handle field_list if it is just a string of a single field.
@@ -343,7 +344,6 @@ def get_vertical_profiles(field_list,dir,trajectory,undef=np.nan, nz=41, atm_fie
 
     ## Get regional.grid.a file.
     gridfilename = (dir + '/regional.grid.a')
-    filename = (dir + '/archv.2018_050_00.a')
 
     ## Get lat/lon and bounds for the points.
     min_lon = np.min(points[:,0])
@@ -370,7 +370,7 @@ def get_vertical_profiles(field_list,dir,trajectory,undef=np.nan, nz=41, atm_fie
 
     ## Process each field at each time.
     for tt in range(len(trajectory['datetime'])):
-        filename = trajectory['datetime'][tt].strftime(dir + '/archv.%Y_%j_%H.a')
+        filename = glob.glob(trajectory['datetime'][tt].strftime(dir + '/archv.%Y_%j_%H.a*'))[0]
         print(filename)
 
         ffff=-1
