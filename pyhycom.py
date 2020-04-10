@@ -4,7 +4,54 @@ pyhycom.py
 A Python interface to HYCOM files.
 """
 import numpy as np
+import gzip
 import os
+
+def open_a_file(filename, mode):
+    """
+    Open the file using gzip if if is a gzipped file (ending in .gz),
+    otherwise, use regular Python read.
+    """
+    if filename[-3:] == '.gz':
+        file = gzip.open(filename, mode=mode)
+    else:
+        file = open(filename[:-1]+'a',mode=mode)
+    return file
+
+
+def get_b_filename(filename):
+    """
+    Return the name of the corresponding HYCOM "b" file.
+    If it is a gzipped file, replace the .a.gz with .b,
+    otherwise, replace .a with .b.
+    """
+    if filename[-3:] == '.gz':
+        bfilename = filename[:-4] + 'b'
+    else:
+        bfilename = filename[:-1]+'b'
+    return bfilename
+
+
+def thickness2depths(dz):
+    """
+    Convert layer thickness values to depths.
+    return tuple of (z_bottom, z_center, z_top) of each layer.
+    """
+    z_bottom = 0.0 * dz
+    z_center = 0.0 * dz
+    z_top = 0.0 * dz
+    kdm, jdm, idm = dz.shape
+
+    for k in range(1, kdm):
+        z_top[k,:,:] = z_top[k-1,:,:] + dz[k-1,:,:]
+
+    z_bottom[0:kdm-1,:,:] = z_top[1:kdm,:,:]
+    z_bottom[kdm-1,:,:] = z_bottom[kdm-2,:,:] + dz[k,:,:]
+
+    z_center = 0.5 * (z_top + z_bottom)
+
+    return (z_bottom, z_center, z_top)
+
 
 def getTextFile(filename):
     """
@@ -18,8 +65,9 @@ def getDims(filename):
     """
     Returns HYCOM domain dimensions for a given
     archive or regional.grid .a file.
+    NOTE: This does NOT work for regional.depth files.
     """
-    f = getTextFile(filename[:-1]+'b')
+    f = getTextFile(get_b_filename(filename))
     #
     idmFound = False
     jdmFound = False
@@ -43,7 +91,7 @@ def getFieldIndex(field,filename):
     """
     Function description
     """
-    f = getTextFile(filename[:-1]+'b')
+    f = getTextFile(get_b_filename(filename))
     if 'arch' in filename:f = f[10:]
     if 'grid' in filename:f = f[3:]
     fieldIndex = []
@@ -57,7 +105,7 @@ def getNumberOfRecords(filename):
     """
     Function description
     """
-    f = getTextFile(filename[:-1]+'b')
+    f = getTextFile(get_b_filename(filename))
     if 'arch' in filename:
         f = f[10:]; return len(f)
     if 'grid' in filename:
@@ -69,19 +117,23 @@ def getNumberOfRecords(filename):
 
 
 
-def getBathymetry(filename,dims,undef):
+def getBathymetry(filename,undef=np.nan):
     """
     Reads a HYCOM bathymetry file and return the bathymetry field.
+    Get dims from regional.grid.a.
     """
     import numpy as np
     jdm,idm = dims
-    file = open(filename[:-1]+'a',mode='rb')
-    field = np.reshape(np.fromfile(file,dtype='float32',count=idm*jdm).byteswap(),(jdm,idm))
+    file = open_a_file(filename, mode='rb')
+    ## The data are stored as float32, which has 4 bytes per each value.
+    data = file.read(idm*jdm*4)
+    field = np.reshape(np.fromstring(data,dtype='float32',count=idm*jdm).byteswap(),(jdm,idm))
     file.close()
     field[field>2**99] = undef
     return field
 
 
+#def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
 def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
     """
     A function to read hycom raw binary files (regional.grid.a, archv.*.a and forcing.*.a supported),
@@ -106,12 +158,16 @@ def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
         idm = dims[1]
 
     reclen = 4*idm*jdm                                   # Record length in bytes
-    nrecs = getNumberOfRecords(filename)                 # Total number of records
-    pad = (getsize(filename)-reclen*nrecs)/nrecs         # Pad size in bytes
+    ## HYCOM binary data is written out in chunks/"words" of multiples of 4096*4 bytes.
+    ## In general, the length of one level of one variable (reclen) will fall between
+    ## consecutive multiples of the wordlen. The data is padded to bring the volume
+    ## up to the next multiple. The "pad" value below is how many bytes are needed to do this.
+    wordlen = 4096*4
+    pad = wordlen * np.ceil(reclen / wordlen) - reclen   # Pad size in bytes
     fieldRecords = getFieldIndex(field,filename)         # Get field record indices
     fieldAddresses = np.array(fieldRecords)*(reclen+pad) # Address in bytes
 
-    file = open(filename,mode='rb') # Open file
+    file = open_a_file(filename,mode='rb') # Open file
 
     # Read field records:
     if fieldAddresses.size == kdm: # 3-d field
@@ -129,10 +185,12 @@ def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
         for k in range(kmax):
             file.seek(int(fieldAddresses[k]),0) # Move to address
             if len(layers) < 1:
-                field[k,:,:] = np.reshape(np.fromfile(file,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
+                data = file.read(idm*jdm*4)
+                field[k,:,:] = np.reshape(np.fromstring(data,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
             else:
                 if k in layers:   ## Levels are 1 to kdm. Python indices are zero based.
-                    field[k,:,:] = np.reshape(np.fromfile(file,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
+                    data = file.read(idm*jdm*4)
+                    field[k,:,:] = np.reshape(np.fromstring(data,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
 
         ## Keep only tha layers that were specified. (The others would be all zeros.)
         if len(layers) > 0:
@@ -146,7 +204,16 @@ def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
 
     else: # 2-d field
         file.seek(int(fieldAddresses[0]),0)     # Move to address
-        field = np.reshape(np.fromfile(file,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
+        data = file.read(idm*jdm*4)
+        field = np.reshape(np.fromstring(data,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
+
+        if not x_range is None:
+            field = field[:,x_range]
+
+        if not y_range is None:
+            field = field[y_range,:]
+
+
     #field = field.byteswap() # Convert to little-endian
 
     file.close()
@@ -154,8 +221,8 @@ def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
 
     return field
 
-def get_vertical_profiles_at_points(field_list,filename,points,undef=np.nan):
 
+def get_vertical_profiles_at_points(field_list,filename,points,undef=np.nan):
     """
     F = get_vertical_profiles_at_points(field_list,filename,points,undef=np.nan)
 
@@ -244,8 +311,6 @@ def get_vertical_profiles_at_points(field_list,filename,points,undef=np.nan):
 
 
 def get_vertical_profiles(field_list,dir,trajectory,undef=np.nan, nz=41, atm_fields=None):
-
-    #(['temp','salin'],dir,trajectory,undef=np.nan)
     """
     F = get_vertical_profiles(field_list,dir,trajectory,undef=np.nan)
 
@@ -429,6 +494,8 @@ def ab2nc(filename):
     A function that converts a given hycom binary .a file into an equivalent .nc file.
 
     Module requirements: numpy,netCDF4,matplotlib.dates
+
+    THIS FUNCTION IS CURRENTLY BROKEN. TODO: Fix this function.
     """
     #
     import numpy as np
@@ -564,7 +631,47 @@ def ab2nc(filename):
 #
 ########################################################################
 #
-def mixedLayerDepth(T,d,delT):
+
+#
+########################################################################
+#
+
+def getMixedLayerDepth(filename, delT=0.2, delS=0.03, ref_depth=10):
+    """
+    One definition of mixed layer depth is first level when the temperature
+    or salinity difference is greater than a threshold, relative to a reference depth.
+    This function first calculates the temperature and salinity based
+    mixed layer depths (mldt and mlds, respectively),
+    then returns the one that closer to the surface as
+    "the" mixed layer depth (mld).
+    By default, it will use the threshold of 0.2 C for temperature
+    and 0.03 PSU for salinity.
+
+    Returned values are a tuple of (mld,mldt,mlds)
+    """
+    import os.path
+
+    dims2 = getDims(os.path.dirname(filename) + '/regional.grid.b')
+    t = getField('temp', filename)
+    s = getField('salin', filename)
+    dz = getField('thknss', filename) / 9806.0
+    z_bottom, z_center, z_top = thickness2depths(dz)
+
+    mldt = np.nan*np.zeros(dims2)
+    mlds = np.nan*np.zeros(dims2)
+    mld = np.nan*np.zeros(dims2)
+
+    for jj in range(dims2[0]):
+        for ii in range(dims2[1]):
+            if not np.isnan(t[0,jj,ii]):
+                mldt[jj,ii] = mixedLayerDepthT(t[:,jj,ii],z_center[:,jj,ii],delT, ref_depth=10.0)
+                mlds[jj,ii] = mixedLayerDepthS(s[:,jj,ii],z_center[:,jj,ii],delS, ref_depth=10.0)
+                mld[jj,ii] = min(mldt[jj,ii],mlds[jj,ii])
+
+    return (mld, mldt, mlds)
+
+
+def mixedLayerDepthT(T,d,delT, ref_depth=10.0):
     """
     Computes mixed layer depth given a temperature and depth
     profiles and temperature difference criterion.
@@ -577,14 +684,63 @@ def mixedLayerDepth(T,d,delT):
     d    :: list of depth values, of same length as T
     delT :: float; Temperature difference criterion in K
     """
-    Tm=T[0]-delT
-    for k in range(1,len(T),1):
-        if T[k]<Tm:
-            mld=(abs(T[k-1]-Tm)*d[k] \
-                +abs(Tm-T[k])*d[k-1])\
-                /(T[k-1]-T[k])
-            return mld
+
+    ref_temp = T[0]
+    k_begin = 1
+
+    if ref_depth > 0.1:
+        ref_temp = np.interp(ref_depth, d, T)
+        k_begin = int(np.ceil(np.interp(ref_depth, d, np.arange(len(d)))))
+
+    Tm=ref_temp-delT
+    for k in range(k_begin,len(T),1):
+        if np.isfinite(T[k]):
+            if T[k]<Tm:
+                mld=(abs(T[k-1]-Tm)*d[k] \
+                     +abs(Tm-T[k])*d[k-1])\
+                     /(T[k-1]-T[k])
+                return mld
+        else:
+            return d[k-1]
     return d[len(T)-1]
+
+
+
+
+def mixedLayerDepthS(S,d,delS, ref_depth=10.0):
+    """
+    Computes mixed layer depth given a temperature and depth
+    profiles and temperature difference criterion.
+    Uses linear interpolation to find mixed layer depth between
+    two discrete levels. If criterion is not satisfied,
+    returns the last element of the depth list.
+
+    Input arguments:
+    S    :: list of vertical salinity profile
+    d    :: list of depth values, of same length as T
+    delS :: float; Salinity difference criterion in K
+    """
+
+    ref_sal = S[0]
+    k_begin = 1
+
+    if ref_depth > 0.1:
+        ref_sal = np.interp(ref_depth, d, S)
+        k_begin = int(np.ceil(np.interp(ref_depth, d, np.arange(len(d)))))
+
+    Sm=ref_sal+delS
+    for k in range(k_begin,len(S),1):
+        if np.isfinite(S[k]):
+            if S[k]>Sm:
+                mld=(abs(S[k-1]-Sm)*d[k] \
+                     +abs(Sm-S[k])*d[k-1])\
+                     /(S[k]-S[k-1])
+                return mld
+        else:
+            return d[k-1]
+    return d[len(S)-1]
+
+
 #
 ########################################################################
 #
