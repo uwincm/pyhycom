@@ -119,8 +119,9 @@ def getNumberOfRecords(filename):
 
 def getBathymetry(filename,undef=np.nan):
     """
-    Reads a HYCOM bathymetry file and return the bathymetry field.
-    Get dims from regional.grid.a.
+    Reads a HYCOM bathymetry file (e.g., regional.depth.a)
+    and return the bathymetry field.
+    Will get dims from regional.grid.a.
     """
     import numpy as np
     jdm,idm = dims
@@ -133,7 +134,6 @@ def getBathymetry(filename,undef=np.nan):
     return field
 
 
-#def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
 def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
     """
     A function to read hycom raw binary files (regional.grid.a, archv.*.a and forcing.*.a supported),
@@ -141,6 +141,10 @@ def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
 
     ## BK added layers option to get a set of specified layers instead of the full file.
     ## layers is zero based. Leave it as None (or set it to []) to get all layers.
+
+    ## TODO: Have x_range, and y_range only access the needed data.
+             Right now, it will read the entire domain then subset it.
+             (For layers, it will skip over the layers not specified).
     """
     import numpy as np
     from os.path import getsize
