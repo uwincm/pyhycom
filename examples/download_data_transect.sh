@@ -2,7 +2,7 @@
 
 ## Download sample data to the directory data/
 WGET='wget -r -np -nH --cut-dirs 3'
-HTTP=https://orca.atmos.washington.edu/~bkerns/code/awovispy/data
+HTTP=https://orca.atmos.washington.edu/~bkerns/code/pyhycom/data
 
 ## HYCOM grid and bathymetry files.
 $WGET $HTTP/regional.grid.a

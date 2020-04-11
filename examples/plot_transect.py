@@ -21,6 +21,10 @@ The data HYCOM data files can be downloaded from here:
 
 HYCOM DATA FILES FOR THIS EXAMPLE ARE ONLINE HERE:
 https://orca.atmos.washington.edu/~bkerns/code/awovispy/pyhycom/data/
+
+This script depends on the following Python modules:
+  - netCDF4.Dataset (for reading WRF)
+  - cmocean (for salinity color map)
 """
 
 def plot_map_background(plot_area = [-180, 180, -70, 70], ax = plt.gca()
@@ -117,10 +121,11 @@ def calc_trajectory(speed, duration_hours, direction_ccw_from_east
 ################################################################################
 
 ## !!!!!! Edit data paths with your system directories. !!!!!!
-dir = '/home/orca/bkerns/public_html/code/pyhycom/data'
+dir = './data'
 fn_maps = dir+'/archv.2018_091_00.a.gz'  ## Map has the initial time. "What you see before deploying"
 fn_grid = dir+'/regional.grid.a'
 plot_area = [152,172,-8,8]   # [lon1, lon2, lat1, lat2], lon is 0-360 for this HYCOM run.
+quiver_skip_x=4  ## Skip factor in x (e.g., time) direction for vector winds, currents.
 
 ## !!!!!! Initialize the trajectory you want. !!!!!!!
 """
@@ -207,8 +212,11 @@ ax333 = ax33.twinx()
 wspd = np.sqrt(np.power(G['U10'],2) + np.power(G['V10'],2))
 h3,=ax333.plot(time_hours, wspd, color='k', linewidth=1)
 scale = np.nanmean(wspd)
-ax333.quiver(time_hours, 2.0 + 0*time_hours, G['U10'], G['V10'], color='k'
-        , width=0.012, headwidth=4, scale=4*scale, units='inches')
+ax333.quiver(time_hours[::quiver_skip_x], 3.0 + 0*time_hours[::quiver_skip_x]
+        , G['U10'][::quiver_skip_x], G['V10'][::quiver_skip_x]
+        , color='k', width=0.012, headwidth=4, scale=4*scale, units='inches')
+
+
 ax333.set_ylim([0,20])
 ax333.set_ylabel('[m/s]')
 plt.legend([h1,h2,h3],['SST','2 m Tair','WSPD'],frameon=False, fontsize=8)
@@ -224,14 +232,13 @@ H3 = plt.contourf(time_hours2d, F['depth_middle_of_layer'],F['temp'], levels=lev
 
 u_plot = F['u-vel'].copy()
 v_plot = F['v-vel'].copy()
-for ii in range(0,12,2):
+for ii in range(0,12,2): ## Skip every other level for first 10 levels (in ML)
     u_plot[ii,:] = np.nan
     v_plot[ii,:] = np.nan
 
-skipt=4*6
-plt.quiver(time_hours2d[:,::skipt]
-    , F['depth_middle_of_layer'][:,::skipt]
-    ,u_plot[:,::skipt], v_plot[:,::skipt]
+plt.quiver(time_hours2d[:,::quiver_skip_x]
+    , F['depth_middle_of_layer'][:,::quiver_skip_x]
+    ,u_plot[:,::quiver_skip_x], v_plot[:,::quiver_skip_x]
     , width=0.012, headwidth=4, scale=4.0, units='inches')
 
 cbar = plt.colorbar(H3)
@@ -279,8 +286,9 @@ ax444 = ax44.twinx()
 wspd = np.sqrt(np.power(G['U10'],2) + np.power(G['V10'],2))
 h4,=ax444.plot(time_hours, wspd, color='k', linewidth=1)
 scale = np.nanmean(wspd)
-ax444.quiver(time_hours, 2.0 + 0*time_hours, G['U10'], G['V10'], color='k'
-        , width=0.012, headwidth=4, scale=4*scale, units='inches')
+ax444.quiver(time_hours[::quiver_skip_x], 3.0 + 0*time_hours[::quiver_skip_x]
+        , G['U10'][::quiver_skip_x], G['V10'][::quiver_skip_x]
+        , color='k', width=0.012, headwidth=4, scale=4*scale, units='inches')
 ax444.set_ylim([0,20])
 ax444.set_ylabel('[m/s]')
 plt.legend([h5,h4],['Salinity','WSPD'],frameon=False, fontsize=8)
@@ -296,14 +304,13 @@ H4 = plt.contourf(time_hours2d, F['depth_middle_of_layer'],F['salin'], levels=le
 
 u_plot = F['u-vel'].copy()
 v_plot = F['v-vel'].copy()
-for ii in range(0,12,2):
+for ii in range(0,12,2): ## Skip every other level for first 10 levels (in ML)
     u_plot[ii,:] = np.nan
     v_plot[ii,:] = np.nan
 
-skipt=4*6
-plt.quiver(time_hours2d[:,::skipt]
-    , F['depth_middle_of_layer'][:,::skipt]
-    ,u_plot[:,::skipt], v_plot[:,::skipt]
+plt.quiver(time_hours2d[:,::quiver_skip_x]
+    , F['depth_middle_of_layer'][:,::quiver_skip_x]
+    ,u_plot[:,::quiver_skip_x], v_plot[:,::quiver_skip_x]
     , width=0.012, headwidth=4, scale=4.0, units='inches')
 
 cbar= plt.colorbar(H4)
