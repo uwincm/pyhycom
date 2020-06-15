@@ -124,11 +124,14 @@ def getBathymetry(filename,undef=np.nan):
     Will get dims from regional.grid.a.
     """
     import numpy as np
-    jdm,idm = dims
+    if os.path.dirname(filename) == '':
+        jdm,idm = getDims('regional.grid.b')
+    else:
+        jdm,idm = getDims(os.path.dirname(filename)+'/regional.grid.a')
     file = open_a_file(filename, mode='rb')
     ## The data are stored as float32, which has 4 bytes per each value.
     data = file.read(idm*jdm*4)
-    field = np.reshape(np.fromstring(data,dtype='float32',count=idm*jdm).byteswap(),(jdm,idm))
+    field = np.reshape(np.frombuffer(data,dtype='float32',count=idm*jdm).byteswap(),(jdm,idm))
     file.close()
     field[field>2**99] = undef
     return field
@@ -190,11 +193,11 @@ def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
             file.seek(int(fieldAddresses[k]),0) # Move to address
             if len(layers) < 1:
                 data = file.read(idm*jdm*4)
-                field[k,:,:] = np.reshape(np.fromstring(data,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
+                field[k,:,:] = np.reshape(np.frombuffer(data,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
             else:
                 if k in layers:   ## Levels are 1 to kdm. Python indices are zero based.
                     data = file.read(idm*jdm*4)
-                    field[k,:,:] = np.reshape(np.fromstring(data,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
+                    field[k,:,:] = np.reshape(np.frombuffer(data,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
 
         ## Keep only tha layers that were specified. (The others would be all zeros.)
         if len(layers) > 0:
@@ -209,7 +212,7 @@ def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
     else: # 2-d field
         file.seek(int(fieldAddresses[0]),0)     # Move to address
         data = file.read(idm*jdm*4)
-        field = np.reshape(np.fromstring(data,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
+        field = np.reshape(np.frombuffer(data,dtype='float32',count=idm*jdm),(jdm,idm)).byteswap()
 
         if not x_range is None:
             field = field[:,x_range]
@@ -499,11 +502,10 @@ def ab2nc(filename):
 
     Module requirements: numpy,netCDF4,matplotlib.dates
 
-    THIS FUNCTION IS CURRENTLY BROKEN. TODO: Fix this function.
+    THIS FUNCTION DOES NOT YET WORK FOR FORCIGN FILES. TODO: Fix forcing files portion.
     """
     #
     import numpy as np
-    #from pycom import getHycomField
     from netCDF4 import Dataset
     #
     def str2(n):
@@ -513,6 +515,7 @@ def ab2nc(filename):
     if filename.rfind('regional.grid.a')>-1:
         #
         # Read regional.grid.b file:
+
         f=open(filename[:-1]+'b','r')
         file_content=[line.rstrip() for line in f.readlines()]
         f.close()
@@ -525,7 +528,8 @@ def ab2nc(filename):
         for line in file_content[3:]:
             fields.append(line[0:4])
         #
-        ncfile=Dataset(filename[:-1]+'nc','w',format='NETCDF3_CLASSIC') # Open file
+        ncfn = ('regional.grid.nc')
+        ncfile=Dataset(ncfn,'w',format='NETCDF3_CLASSIC') # Open file
         #
         ncfile.createDimension('X',size=idm) # Create x-dim
         ncfile.createDimension('Y',size=jdm) # Create y-dim
@@ -534,7 +538,10 @@ def ab2nc(filename):
         nc_field=ncfile.createVariable('X',datatype='f4',dimensions=('X')); nc_field[:]=np.arange(idm)
         nc_field=ncfile.createVariable('Y',datatype='f4',dimensions=('Y')); nc_field[:]=np.arange(jdm)
         for field in fields:
-            ab_field=getHycomField('2d',fields.index(field)+1,dims,filename,np.NaN)
+            print('Doing '+field+'.')
+            ab_field=getField(field,filename,np.NaN)
+            print('Shape: ' + str(ab_field.shape))
+            print('(min, mean, max) = ({0:f}, {1:f}, {2:f})'.format(np.nanmin(ab_field),np.nanmean(ab_field),np.nanmax(ab_field)))
             nc_field=ncfile.createVariable(field,datatype='f4',dimensions=('Y','X'))
             nc_field[:]=ab_field
         #
@@ -550,13 +557,23 @@ def ab2nc(filename):
         f=open(filename[:-1]+'b','r')
         file_content=[line.rstrip() for line in f.readlines()]
         f.close()
-        idm=int(file_content[7][2:5])    # Get X-dim size
-        jdm=int(file_content[8][2:5])    # Get Y-dim size
+        idm=int(file_content[7][0:5])    # Get X-dim size
+        jdm=int(file_content[8][0:5])    # Get Y-dim size
         kdm=int(file_content[-1][33:35]) # Get Z-dim size
         dims=(kdm,jdm,idm)
         #
-        plon=getHycomField('2d',1,dims,'/home/disk/manta8/milan/esmf/application/SCRATCH/output/cpl_sst/regional.grid.a',np.NaN)
-        plat=getHycomField('2d',2,dims,'/home/disk/manta8/milan/esmf/application/SCRATCH/output/cpl_sst/regional.grid.a',np.NaN)
+        if os.path.dirname(filename) == '':
+            regional_grid_fn = 'regional.grid.b'
+        else:
+            regional_grid_fn = (os.path.dirname(filename) + '/regional.grid.b')
+        plon=getField('plon',regional_grid_fn,np.NaN)
+        plat=getField('plat',regional_grid_fn,np.NaN)
+
+        if os.path.dirname(filename) == '':
+            regional_depth_fn = 'regional.depth.b'
+        else:
+            regional_depth_fn = (os.path.dirname(filename) + '/regional.depth.b')
+        bathy = getBathymetry(regional_depth_fn,undef=np.nan)
         #
         # Compute a current datetime instance:
         day_in_year=int(filename[-8:-5])
@@ -567,33 +584,41 @@ def ab2nc(filename):
         date_string=str(now.year)+str2(now.month)+str2(now.day)+'_'+hour
         #
         print('Working on','archv.'+date_string+'.nc')
-        ncfile=Dataset('archv.'+date_string+'.nc','w',format='NETCDF3_CLASSIC') # Open file
+        ncfn = ('archv.'+date_string+'.nc')
+        ncfile=Dataset(ncfn,'w',format='NETCDF3_CLASSIC') # Open file
         #
-        ncfile.createDimension('Longitude',size=idm) # Create x-dim
-        ncfile.createDimension('Latitude',size=jdm)  # Create y-dim
-        ncfile.createDimension('Depth',size=kdm)     # Create z-dim
-        #
-        # Write 2-d fields into file:
+        ncfile.createDimension('X',size=idm) # Create x-dim
+        ncfile.createDimension('Y',size=jdm) # Create y-dim
+        ncfile.createDimension('layer',size=kdm)     # Create z-dim
+        ##
+        ## Read each field and write to NetCDF.
+        ##
         fields=[]
-        for line in file_content[10:22]:
-            fields.append(line[0:8].rstrip())
-        nc_field=ncfile.createVariable('Longitude',datatype='f4',dimensions=('Longitude'))
-        nc_field[:]=np.linspace(np.min(plon[0,:]),np.max(plon[0,:]),idm)
-        nc_field=ncfile.createVariable('Latitude',datatype='f4',dimensions=('Latitude'))
-        nc_field[:]=plat[:,0]
-        nc_field=ncfile.createVariable('Depth',datatype='f4',dimensions=('Depth')); nc_field[:]=np.arange(kdm)
+        for line in file_content[10:]:
+            fields.append(line[0:8].replace('.','').rstrip())
+        fields = np.unique(fields)
+        print(fields)
+
+        nc_field=ncfile.createVariable('longitude',datatype='f4',dimensions=('Y','X'))
+        nc_field[:]=plon
+        nc_field=ncfile.createVariable('latitude',datatype='f4',dimensions=('Y','X'))
+        nc_field[:]=plat
+        nc_field=ncfile.createVariable('bathymetry',datatype='f4',dimensions=('Y','X'))
+        nc_field[:]=bathy
+        nc_field=ncfile.createVariable('layer',datatype='f4',dimensions=('layer',))
+        nc_field[:]=np.arange(kdm)
+
+
         for field in fields:
-            ab_field=getHycomField('2d',fields.index(field)+1,dims,filename,np.NaN)
-            nc_field=ncfile.createVariable(field,datatype='f4',dimensions=('Latitude','Longitude'))
-            nc_field[:]=ab_field
-        #
-        # Write 3-d fields into file:
-        fields=[]
-        for line in file_content[23:29]:
-            fields.append(line[0:8].rstrip())
-        for field in fields:
-            ab_field=getHycomField('3d',fields.index(field)+1,dims,filename,np.NaN)
-            nc_field=ncfile.createVariable(field,datatype='f4',dimensions=('Depth','Latitude','Longitude'))
+            print('Doing '+field+'.')
+            ab_field=getField(field,filename,np.NaN)
+            s = ab_field.shape
+            print('Shape: ' + str(s))
+            print('(min, mean, max) = ({0:f}, {1:f}, {2:f})'.format(np.nanmin(ab_field),np.nanmean(ab_field),np.nanmax(ab_field)))
+            if len(s) < 3:
+                nc_field=ncfile.createVariable(field,datatype='f4',dimensions=('Y','X'))
+            else:
+                nc_field=ncfile.createVariable(field,datatype='f4',dimensions=('layer','Y','X'))
             nc_field[:]=ab_field
         ncfile.close() # Close file
     #
@@ -607,16 +632,22 @@ def ab2nc(filename):
         f.close()
         idm=int(file_content[4][9:12])  # Get X-dim size
         jdm=int(file_content[4][14:17]) # Get Y-dim size
+        kdm=int(file_content[-1][33:35]) # Get number of levels.
         dims=(jdm,idm)
         print('Working on file: '+filename,dims)
         #
-        plon=getHycomField('2d',1,dims,'/home/disk/manta8/sophie/hycom/PACa0.08/SCRATCH/regional.grid.a',np.NaN)
-        plat=getHycomField('2d',2,dims,'/home/disk/manta8/sophie/hycom/PACa0.08/SCRATCH/regional.grid.a',np.NaN)
+        if os.path.dirname(filename) == '':
+            regional_grid_fn = 'regional.grid.b'
+        else:
+            regional_grid_fn = (os.path.dirname(filename) + '/regional.grid.b')
+        plon=getField('plon',regional_grid_fn,np.NaN)
+        plat=getField('plat',regional_grid_fn,np.NaN)
         #
         ncfile=Dataset(filename[:-1]+'nc','w',format='NETCDF3_CLASSIC') # Open file
         #
         ncfile.createDimension('Longitude',size=idm) # Create x-dim
         ncfile.createDimension('Latitude',size=jdm)  # Create y-dim
+        ncfile.createDimension('Layer',size=kdm)  # Create y-dim
         ncfile.createDimension('Time',size=0)        # Create t-dim (unlimitted)
         #
         nc_field=ncfile.createVariable(filename[-8:-2],\
@@ -632,6 +663,68 @@ def ab2nc(filename):
             record=record+1
         ncfile.close() # Close file
         #
+    return ncfn
+
+
+
+#
+########################################################################
+#
+
+def get_hycom_org_fmrc_opendap(YYYYMMDD, fcst_hours = 84
+                    , field_list = ['water_temp','water_temp_bottom']):
+    import datetime as dt
+    from netCDF4 import Dataset, num2date
+
+    thredds_dir = 'https://tds.hycom.org/thredds/dodsC/GLBy0.08/expt_93.0/FMRC/runs'
+    DATA={}
+
+    this_dt = dt.datetime.strptime(YYYYMMDD+'12','%Y%m%d%H')
+
+    fmrc_fn = this_dt.strftime('GLBy0.08_930_FMRC_RUN_%Y-%m-%dT%H:00:00Z')
+    print('Accessing ' + thredds_dir + '/' + fmrc_fn + '.')
+
+    DS = Dataset(thredds_dir + '/' + fmrc_fn)
+    print('\n[INFO] Variables:\n{}'.format(DS.variables))
+    print('\n[INFO] Dimensions:\n{}'.format(DS.dimensions))
+
+    print('Getting coordinates.')
+    DATA['lon']=DS['lon'][:]
+    DATA['lat']=DS['lat'][:]
+    time0=DS['time'][:]  # Hours since a reference time.
+    time0_units = DS['time'].units
+    datetime0 = num2date(time0,time0_units)
+    tidx = [x for x in range(len(time0)) if datetime0[x] <= this_dt + dt.timedelta(hours=int(fcst_hours))]
+    DATA['dtime'] = datetime0[0:tidx[-1]+1]
+    DS.close()
+
+
+    list3d = ['water_temp']
+    #field_list = []
+    for field in field_list:
+        print('Getting '+field+'.')
+        DS = Dataset(thredds_dir + '/' + fmrc_fn)
+
+        if field in list3d:
+            print('3D')
+            DATA[field]=np.nan*np.zeros([len(tidx), 41, len(DATA['lat']), len(DATA['lon'])])
+            for kk in range(41):
+                print(kk)
+                DATA[field][0,kk,:,:]=DS.variables[field][0,kk,:,:] #[0:tidx[-1]+1,:,:,:]
+        else:
+            print('2D')
+            DATA[field]=np.nan*np.zeros([len(tidx), len(DATA['lat']), len(DATA['lon'])])
+            DATA[field][0,:,:]=DS.variables[field][0,:,:] #[0:tidx[-1]+1,:,:]
+
+        DS.close()
+
+    print('Finished.')
+    return DATA
+
+
+
+def ncz2ab():
+    pass
 
 ########################################################################
 ############### Mixed Layer Depth Functions ############################
@@ -748,3 +841,24 @@ def str2(number):
     if len(string)<2:string='0'+string
     return string
 #
+
+#
+########################################################################
+##
+## Main function.
+## If this is called as a main function with a file provided as command line arg,
+## then assume the intention is to do ab2nc on that file.
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) < 2:
+        print('Usage: python pyhycom.py filename.a')
+        print('       To convert to filename.nc')
+    else:
+        filename = sys.argv[1]
+        if os.path.exists(filename):
+            ncfn = ab2nc(filename)
+            print('Created '+ncfn)
+        else:
+            print('File does not exist: '+filename)
