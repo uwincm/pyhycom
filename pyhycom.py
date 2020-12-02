@@ -173,7 +173,6 @@ def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
     wordlen = 4096*4
     pad = wordlen * np.ceil(reclen / wordlen) - reclen   # Pad size in bytes
     fieldRecords = getFieldIndex(field,filename)         # Get field record indices
-    print(fieldRecords)
     fieldAddresses = np.array(fieldRecords)*(reclen+pad) # Address in bytes
 
     file = open_a_file(filename,mode='rb') # Open file
@@ -261,7 +260,6 @@ def getFieldRestart(field,filename,dims,undef=np.nan,layers=None,x_range=None,y_
     wordlen = 4096*4
     pad = wordlen * np.ceil(reclen / wordlen) - reclen   # Pad size in bytes
     fieldRecords = getFieldIndex(field,filename)         # Get field record indices
-    print(fieldRecords)
     fieldAddresses = np.array(fieldRecords)*(reclen+pad) # Address in bytes
 
     file = open_a_file(filename,mode='rb') # Open file
@@ -754,7 +752,6 @@ def ab2nc(filename):
         jdm=int(file_content[8][0:5])    # Get Y-dim size
         kdm=int(file_content[-1][33:35]) # Get Z-dim size
         dims=(kdm,jdm,idm)
-        print(dims)
         #
         if os.path.dirname(filename) == '':
             regional_grid_fn = 'regional.grid.b'
@@ -778,7 +775,6 @@ def ab2nc(filename):
         date_string=str(now.year)+str2(now.month)+str2(now.day)+'_'+hour
         #
         print('Working on','archv.'+date_string+'.nc')
-        #ncfn = ('archv.'+date_string+'.nc')
         ncfn = (filename[0:-2]+'.nc')
         ncfile=Dataset(ncfn,'w',format='NETCDF3_CLASSIC') # Open file
         #
@@ -794,10 +790,6 @@ def ab2nc(filename):
             this_field = line[0:8].replace('.','').rstrip()
             if not this_field in fields:
                 fields.append(this_field)
-        print(fields)
-
-        print(plon.shape)
-        print(plat.shape)
 
         nc_field=ncfile.createVariable('longitude',datatype='f4',dimensions=('Y','X'))
         nc_field[:]=plon[0:jdm,0:idm]
@@ -859,17 +851,6 @@ def ab2nc(filename):
         else:
             regional_depth_fn = (os.path.dirname(filename) + '/regional.depth.b')
         bathy = getBathymetry(regional_depth_fn,undef=np.nan)
-        #
-        # Compute a current datetime instance:
-        # day_in_year=int(filename[-8:-5])
-        # hour=filename[-4:-2]
-        # year=int(filename[-13:-9])
-        # day_since_0001_01_01=(year-1)*365+year/4-year/100+year/400+day_in_year
-        # now=num2date(day_since_0001_01_01)
-        # date_string=str(now.year)+str2(now.month)+str2(now.day)+'_'+hour
-        # #
-        # print('Working on','archv.'+date_string+'.nc')
-        #ncfn = ('archv.'+date_string+'.nc')
         ncfn = (filename[0:-2]+'.nc')
         ncfile=Dataset(ncfn,'w',format='NETCDF3_CLASSIC') # Open file
         #
@@ -885,10 +866,6 @@ def ab2nc(filename):
             this_field = line[0:8].replace('.','').rstrip()
             if not this_field in fields:
                 fields.append(this_field)
-        print(fields)
-
-        print(plon.shape)
-        print(plat.shape)
 
         nc_field=ncfile.createVariable('longitude',datatype='f4',dimensions=('Y','X'))
         nc_field[:]=plon[0:jdm,0:idm]
