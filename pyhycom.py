@@ -1740,6 +1740,68 @@ def ncz2ab(filename,baclin=60,interp=True):
 
 
 ########################################################################
+############### Derived thermodynamics functions #######################
+########################################################################
+
+def getT100(filename, missing=np.nan):
+    """
+    T100 is the average temperature within the top 100 m of the ocean.
+    Where the bathymetry is shallower than 100 m,
+    it is the average of the entire column.
+    """
+    ## Read
+    t  = getField("temp", filename, missing)
+    dz = getField("thknss", filename, missing) / 9806.0
+    z_bottom, z_center, z_top = thickness2depths(dz)
+
+    ## Calculate
+    t_above_100m = t.copy()
+    t_above_100m[t_above_100m==missing] = np.nan  # Set "missing" to NaN for the calculation.
+    t_above_100m[z_bottom > 100.0] = np.nan
+    t100 = np.nanmean(t_above_100m, axis=0)
+    t100[np.isnan(t100)] = missing  # Set NaN back to "missing" if needed.
+
+    ## Return
+    return t100
+
+
+def getDepthOfT(filename, threshold=26.0, missing=np.nan):
+    """
+    D26C is the depth in meters of the threshold (commonly 26C) isotherm.
+    Commonly regarded as the thermocline depth in the tropics.
+    It will be set to missing when the SST < threshold.
+    It will be set to missing when the entire column never gets below the threshhold.
+    """
+    ## Read
+    t  = getField("temp", filename, missing)
+    dz = getField("thknss", filename, missing) / 9806.0
+    z_bottom, z_center, z_top = thickness2depths(dz)
+
+    S = t.shape
+    ## Calculate
+    d26 = missing + np.zeros((S[1],S[2]))
+    for ii in range(S[2]):
+        for jj in range(S[1]):
+
+            if np.isnan(t[0,jj,ii]):
+                d26[jj,ii] = missing
+            elif t[0,jj,ii] == missing:
+                d26[jj,ii] = missing
+            elif t[0,jj,ii] < threshold:
+                d26[jj,ii] = missing
+            else:
+                lt_thresh_idx0 = [x for x in range(len(t[:,jj,ii])) if t[x,jj,ii] < threshold]
+                if len(lt_thresh_idx0) < 1:
+                    d26[jj,ii] = missing
+                else:
+                    lt_thresh_idx = lt_thresh_idx0[0]
+                    d26[jj,ii] = np.interp(threshold, t[lt_thresh_idx-1:lt_thresh_idx+1,jj,ii], z_center[lt_thresh_idx-1:lt_thresh_idx+1,jj,ii])
+
+    ## Return
+    return d26
+
+
+########################################################################
 ############### Mixed Layer Depth Functions ############################
 ########################################################################
 
