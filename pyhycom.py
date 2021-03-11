@@ -94,7 +94,6 @@ def getFieldIndex(field,filename):
     f = getTextFile(get_b_filename(filename))
     if 'arch' in filename:f = f[10:]
     if 'grid' in filename:f = f[3:]
-    if 'restart' in filename:f = f[2:]
     fieldIndex = []
     for line in f:
         if field == line.split()[0].replace('.','').replace(':',''):
@@ -231,8 +230,6 @@ def getField(field,filename,undef=np.nan,layers=None,x_range=None,y_range=None):
 
 
 
-
-
 def getFieldRestart(field,filename,dims,undef=np.nan,layers=None,x_range=None,y_range=None):
     """
     A function to read hycom raw binary files (regional.grid.a, archv.*.a and forcing.*.a supported),
@@ -315,6 +312,10 @@ def getFieldRestart(field,filename,dims,undef=np.nan,layers=None,x_range=None,y_
     field[field == np.float32(2**100)] = undef
 
     return field
+
+
+
+
 
 
 
@@ -651,8 +652,6 @@ def ab2nc(filename):
     A function that converts a given hycom binary .a file into an equivalent .nc file.
 
     Module requirements: numpy,netCDF4,matplotlib.dates
-
-    THIS FUNCTION DOES NOT YET WORK FOR FORCIGN FILES. TODO: Fix forcing files portion.
     """
     #
     import numpy as np
@@ -752,6 +751,7 @@ def ab2nc(filename):
         jdm=int(file_content[8][0:5])    # Get Y-dim size
         kdm=int(file_content[-1][33:35]) # Get Z-dim size
         dims=(kdm,jdm,idm)
+        print(dims)
         #
         if os.path.dirname(filename) == '':
             regional_grid_fn = 'regional.grid.b'
@@ -775,8 +775,9 @@ def ab2nc(filename):
         date_string=str(now.year)+str2(now.month)+str2(now.day)+'_'+hour
         #
         print('Working on','archv.'+date_string+'.nc')
+        #ncfn = ('archv.'+date_string+'.nc')
         ncfn = (filename[0:-2]+'.nc')
-        ncfile=Dataset(ncfn,'w',format='NETCDF3_CLASSIC') # Open file
+        ncfile=Dataset(ncfn,'w',format='NETCDF4_CLASSIC') # Open file
         #
         ncfile.createDimension('X',size=idm) # Create x-dim
         ncfile.createDimension('Y',size=jdm) # Create y-dim
@@ -790,6 +791,10 @@ def ab2nc(filename):
             this_field = line[0:8].replace('.','').rstrip()
             if not this_field in fields:
                 fields.append(this_field)
+        print(fields)
+
+        print(plon.shape)
+        print(plat.shape)
 
         nc_field=ncfile.createVariable('longitude',datatype='f4',dimensions=('Y','X'))
         nc_field[:]=plon[0:jdm,0:idm]
@@ -814,107 +819,18 @@ def ab2nc(filename):
             print(nc_field)
             nc_field[:]=ab_field
         ncfile.close() # Close file
-        #
-        #--------------------------------------------------------------------------------------------------
-        #
-        #if filename.rfind('forcing')>-1:
-
-
-    elif filename.rfind('restart')>-1:
-        #
-        from matplotlib.dates import num2date
-        #
-        # Read archv.b file:
-        f=open(filename[:-1]+'b','r')
-        file_content=[line.rstrip() for line in f.readlines()]
-        f.close()
-        for iiii in range(len(file_content)):
-            if file_content[iiii].rfind('layer,tlevel,range')>-1:
-                sindx = iiii
-                break
-        kdm=41 #len(file_content)-sindx ;  # int(file_content[-1][33:35]) # Get number of entries.
-        print('Working on file: '+filename)
-        #
-        if os.path.dirname(filename) == '':
-            regional_grid_fn = 'regional.grid.b'
-        else:
-            regional_grid_fn = (os.path.dirname(filename) + '/regional.grid.b')
-        plon=getField('plon',regional_grid_fn,np.NaN)
-        plat=getField('plat',regional_grid_fn,np.NaN)
-        dims = plon.shape
-        print('Dims: ', dims)
-        jdm = dims[0]
-        idm = dims[1]
-
-        if os.path.dirname(filename) == '':
-            regional_depth_fn = 'regional.depth.b'
-        else:
-            regional_depth_fn = (os.path.dirname(filename) + '/regional.depth.b')
-        bathy = getBathymetry(regional_depth_fn,undef=np.nan)
-        ncfn = (filename[0:-2]+'.nc')
-        ncfile=Dataset(ncfn,'w',format='NETCDF3_CLASSIC') # Open file
-        #
-        ncfile.createDimension('X',size=idm) # Create x-dim
-        ncfile.createDimension('Y',size=jdm) # Create y-dim
-        ncfile.createDimension('layer',size=kdm)     # Create z-dim
-        ncfile.createDimension('time',size=1)       # Create dummy time axis
-        ##
-        ## Read each field and write to NetCDF.
-        ##
-        fields=[]
-        for line in file_content[10:]:
-            this_field = line[0:8].replace('.','').rstrip()
-            if not this_field in fields:
-                fields.append(this_field)
-
-        nc_field=ncfile.createVariable('longitude',datatype='f4',dimensions=('Y','X'))
-        nc_field[:]=plon[0:jdm,0:idm]
-        nc_field=ncfile.createVariable('latitude',datatype='f4',dimensions=('Y','X'))
-        nc_field[:]=plat[0:jdm,0:idm]
-        nc_field=ncfile.createVariable('bathymetry',datatype='f4',dimensions=('Y','X'))
-        nc_field[:]=bathy[0:jdm,0:idm]
-        nc_field=ncfile.createVariable('layer',datatype='f4',dimensions=('layer',))
-        nc_field[:]=np.arange(1,kdm+1)
-
-
-        for field in fields:
-            print('Doing '+field+'.')
-            ab_field=getFieldRestart(field,filename,[jdm,idm,kdm],np.NaN)
-            s = ab_field.shape
-            print('Shape: ' + str(s))
-            print('(min, mean, max) = ({0:f}, {1:f}, {2:f})'.format(np.nanmin(ab_field),np.nanmean(ab_field),np.nanmax(ab_field)))
-            if len(s) < 3:
-                nc_field=ncfile.createVariable(field,datatype='f4',dimensions=('time','Y','X'))
-            else:
-                nc_field=ncfile.createVariable(field,datatype='f4',dimensions=('time','layer','Y','X'))
-            print(nc_field)
-            nc_field[:]=ab_field
-        ncfile.close() # Close file
-        #
-        #--------------------------------------------------------------------------------------------------
-        #
-        #if filename.rfind('forcing')>-1:
-
-
-
-    elif filename.rfind('forcing')>-1: # or filename.rfind('restart')>-1:
+    #
+    #--------------------------------------------------------------------------------------------------
+    #
+    elif filename.rfind('forcing')>-1:
         #
         # Read forcing.[field].b file:
         f=open(filename[:-1]+'b','r')
         file_content=[line.rstrip() for line in f.readlines()]
         f.close()
-
-        ## Get dimensions.
-        for iiii in range(len(file_content)):
-            if file_content[iiii].rfind('i/jdm')>-1:
-                sindx = iiii
-                break
-
-        idm=int(file_content[sindx].split(' ')[-2])  # Get X-dim size
-        jdm=int(file_content[sindx].split(' ')[-1])  # Get Y-dim size
-        sindx += 1 # Data begins on the next line after the domain size info.
-
-        kdm=len(file_content)-sindx ;  # int(file_content[-1][33:35]) # Get number of entries.
+        idm=int(file_content[4][8:12])  # Get X-dim size
+        jdm=int(file_content[4][13:17]) # Get Y-dim size
+        kdm=len(file_content)-5 ;  # int(file_content[-1][33:35]) # Get number of entries.
         dims=(jdm,idm)
         print('Working on file: '+filename,dims)
         #
@@ -936,7 +852,7 @@ def ab2nc(filename):
                                        datatype='f4',\
                                        dimensions=('Record','Latitude','Longitude'))
         #
-        file_content=file_content[sindx:]
+        file_content=file_content[5:]
         record=0
         for line in file_content:
             ab_field=getRecord(filename,dims,record,undef=np.nan)
@@ -945,6 +861,7 @@ def ab2nc(filename):
             record=record+1
         ncfile.close() # Close file
         #
+    return ncfn
 
 
 
@@ -986,8 +903,6 @@ def ab2nc(filename):
             record=record+1
         ncfile.close() # Close file
         #
-
-
 
     else:
         #
@@ -1036,6 +951,7 @@ def ab2nc(filename):
 
 
     return ncfn
+
 
 
 
@@ -1171,11 +1087,6 @@ def append_field_to_a_file(fn,data,lev):
     file.close()
 
 
-    ## ASCII representation of the data written.
-    np.savetxt('out.txt',data2d.filled(),fmt='%16.7e')
-
-
-
 def append_field_to_b_file(fn,data,lev,varname,this_datetime,baclin,dens,k_override=-1):
     if lev < 0:
         data2d = 1.0*data
@@ -1290,10 +1201,13 @@ def do_interp(lon,lat,data,lonI,latI):
     linear_factors = np.interp(latI[:,0], lat, np.arange(len(lat)))
     lat_indices = np.round(linear_factors).astype(int)
 
-    #data1 = data.filled()[lat_indices,:]
     data1 = data[lat_indices,:]
     dataI = data1[:,lon_keep[0]:lon_keep[-1]+1]
 
+    if not dataI.shape[0] == S[0] or not dataI.shape[1] == S[1]:
+        print('WARNING: Shape of Interpolated data did not match shape of bathymetry.')
+        print('WARNING: Make sure reflon in mercator.sh is a multiple of 0.08.')
+    
     return dataI
 
 
@@ -1320,6 +1234,7 @@ def ncz2ab(filename,baclin=60,interp=True):
     from scipy.interpolate import RectBivariateSpline
     from numpy import ma
     import matplotlib.pyplot as plt
+    import os.path
 
 
     ## Get the file names.
@@ -1351,17 +1266,29 @@ def ncz2ab(filename,baclin=60,interp=True):
 
     # Surface
     print(fn_sur)
-    DS=Dataset(fn_sur)
-    lon_sur = DS['lon'][:]
-    lat_sur = DS['lat'][:]
-    steric = DS['steric_ssh'][:][0]
-    surflx = DS['qtot'][:][0]
-    salflx = DS['emp'][:][0]
-    bl_dpth = DS['surface_boundary_layer_thickness'][:][0]
-    mix_dpth = DS['mixed_layer_thickness'][:][0]
-    u_btrop = DS['u_barotropic_velocity'][:][0]
-    v_btrop = DS['v_barotropic_velocity'][:][0]
-    DS.close()
+    if os.path.exists(fn_sur):
+        DS=Dataset(fn_sur)
+        lon_sur = DS['lon'][:]
+        lat_sur = DS['lat'][:]
+        steric = DS['steric_ssh'][:][0]
+        surflx = DS['qtot'][:][0]
+        salflx = DS['emp'][:][0]
+        bl_dpth = DS['surface_boundary_layer_thickness'][:][0]
+        mix_dpth = DS['mixed_layer_thickness'][:][0]
+        u_btrop = DS['u_barotropic_velocity'][:][0]
+        v_btrop = DS['v_barotropic_velocity'][:][0]
+        DS.close()
+    else:
+        print("Warning: No surface file! Setting to zero.")
+        lon_sur=1.0*lon
+        lat_sur=1.0*lat
+        steric=0.0*ssh
+        surflx=0.0*ssh
+        salflx=0.0*ssh
+        bl_dpth=0.0*ssh
+        mix_dpth=0.0*ssh
+        u_btrop=0.0*ssh
+        v_btrop=0.0*ssh
 
     ## 3-D Data
     print(fn_ts)
@@ -1387,9 +1314,9 @@ def ncz2ab(filename,baclin=60,interp=True):
     ###
     if interp:
 
-        lonI = getField('plon','regional.grid.a')+360.0 ## 2-D, not necessarily rectangular.
+        lonI = getField('plon','regional.grid.a') #+360.0 ## 2-D, not necessarily rectangular.
         latI = getField('plat','regional.grid.a') ## 2-D, not necessarily rectangular.
-
+        print(np.nanmax(lonI))
         ## Interpolate surface/2d fields.
         print('Interp ssh.')
         ssh = do_interp(lon,lat,ssh,lonI,latI)
@@ -1474,21 +1401,6 @@ def ncz2ab(filename,baclin=60,interp=True):
     z_top = 0.0*t
     z_mask = 0.0*t
 
-    """
-    for k in range(0, kdm-1):
-        dz = z[k+1] - z[k]
-        dp[k,:,:] = 1.0*dz
-        z_top[k,:,:] = z[k]
-        z_bottom[k,:,:] = z[k+1]
-
-        ## Refine if it I'm near the bottom.
-        for jj in range(ny):
-            for ii in range(nx):
-                if z_top[k,jj,ii] < bathy[jj,ii] and z_bottom[k,jj,ii] > bathy[jj,ii]:
-                    dp[k,jj,ii] = bathy[jj,ii] - z[k]
-                if z_top[k,jj,ii] > bathy[jj,ii]:
-                    dp[k,jj,ii] = 0.0
-    """
 
     ## treat z=0 as 0 to half of first depth.
     z_top[0,:,:] = 0.0
@@ -1514,9 +1426,7 @@ def ncz2ab(filename,baclin=60,interp=True):
                 if z_top[k,jj,ii] > bathy[jj,ii]:
                     dz[k,jj,ii] = 0.0
 
-
-    # dp *= 9806 # meters to pressure.
-    dp = dz * 9806
+    dp = dz * 9806 # meters to pressure.
 
     ###
     ### Bottom of the sea mask for 3-D variables.
@@ -1536,54 +1446,7 @@ def ncz2ab(filename,baclin=60,interp=True):
     sigma = ma.masked_array(sigma.data,mask=z_mask)
     sigma_bottom = sigma2_12term(t_bottom, s_bottom)
 
-    ## Interpolate to get layer MEAN values.
-    ## I also take this opportunity to subtract out the barotropic currents
-    ## as "u-vel." and "v-vel." represent the baroclinic currents.
-    """
-    t_layer_mean = 0.0*t
-    s_layer_mean = 0.0*t
-    u_layer_mean = 0.0*t
-    v_layer_mean = 0.0*t
-
-    for k in range(0, kdm-1):
-        t_layer_mean[k,:,:] = 0.5 * (t[k,:,:] + t[k+1,:,:])
-        s_layer_mean[k,:,:] = 0.5 * (s[k,:,:] + s[k+1,:,:])
-        u_layer_mean[k,:,:] = 0.5 * (u[k,:,:] + u[k+1,:,:]) - u_btrop
-        v_layer_mean[k,:,:] = 0.5 * (v[k,:,:] + v[k+1,:,:]) - v_btrop
-    t_layer_mean[kdm-1,:,:] = t[kdm-1,:,:]
-    s_layer_mean[kdm-1,:,:] = s[kdm-1,:,:]
-    u_layer_mean[kdm-1,:,:] = u[kdm-1,:,:]
-    v_layer_mean[kdm-1,:,:] = v[kdm-1,:,:]
-    """
-
     ## Fill in bottom values.
-
-    """
-    for k in range(0, kdm):
-        t_layer_mean_2d = t_layer_mean[k,:,:]
-        t_layer_mean_2d[bathy - z_bottom[k,:,:] < 0.0] = t_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        ## Hack to fix some remaining isolated weird values.
-        ## (Presumably at the edges of bathymetry features near the bottom)
-        ## (ALSO DONE FOR S, U, V BELOW!!!)
-        hack_points = [t_layer_mean_2d < -100.0]
-        t_layer_mean_2d[hack_points] = t_bottom[hack_points]
-        t_layer_mean[k,:,:] = t_layer_mean_2d
-
-        s_layer_mean_2d = s_layer_mean[k,:,:]
-        s_layer_mean_2d[bathy - z_bottom[k,:,:] < 0.0] = s_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        s_layer_mean_2d[hack_points] = s_bottom[hack_points]
-        s_layer_mean[k,:,:] = s_layer_mean_2d
-
-        u_layer_mean_2d = u_layer_mean[k,:,:]
-        u_layer_mean_2d[bathy - z_bottom[k,:,:] < 0.0] = u_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        u_layer_mean_2d[hack_points] = u_bottom[hack_points]
-        u_layer_mean[k,:,:] = u_layer_mean_2d
-
-        v_layer_mean_2d = v_layer_mean[k,:,:]
-        v_layer_mean_2d[bathy - z_bottom[k,:,:] < 0.0] = v_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        v_layer_mean_2d[hack_points] = v_bottom[hack_points]
-        v_layer_mean[k,:,:] = v_layer_mean_2d
-    """
 
     for k in range(0, kdm):
         t_2d = t[k,:,:]
@@ -1679,22 +1542,6 @@ def ncz2ab(filename,baclin=60,interp=True):
     append_field_to_b_file(fnb,v_btrop,-1,'v_btrop',this_datetime,baclin,0.0)
     append_field_to_a_file(fna,v_btrop,-1)
 
-    # Vertical levels.
-    """
-    for k in range(0,40):
-        sigma_mean = np.nanmean(sigma[k,:,:])
-        append_field_to_b_file(fnb,u_layer_mean,k,'u-vel.',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,u_layer_mean,k)
-        append_field_to_b_file(fnb,v_layer_mean,k,'v-vel.',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,v_layer_mean,k)
-        append_field_to_b_file(fnb,dp,k,'thknss',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,dp,k)
-        append_field_to_b_file(fnb,t_layer_mean,k,'temp',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,t_layer_mean,k)
-        append_field_to_b_file(fnb,s_layer_mean,k,'salin',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,s_layer_mean,k)
-    """
-
     for k in range(0,40):
         sigma_mean = np.nanmean(sigma[k,:,:])
         append_field_to_b_file(fnb,u,k,'u-vel.',this_datetime,baclin,sigma_mean)
@@ -1709,11 +1556,6 @@ def ncz2ab(filename,baclin=60,interp=True):
         append_field_to_a_file(fna,s,k)
 
 
-    # plt.pcolormesh(dp[39,:,:].mask) ; plt.colorbar() ;  plt.show()
-    # plt.pcolormesh(dp[39,:,:].filled()) ; plt.colorbar() ;  plt.show()
-    #
-    # plt.pcolormesh(t_layer_mean[39,:,:].mask) ; plt.colorbar() ;  plt.show()
-    # plt.pcolormesh(t_layer_mean[39,:,:].filled()) ; plt.colorbar() ;  plt.show()
 
 
 ########################################################################
@@ -1777,7 +1619,7 @@ def getDepthOfT(filename, threshold=26.0, missing=np.nan):
     ## Return
     return d26
 
-
+    
 ########################################################################
 ############### Mixed Layer Depth Functions ############################
 ########################################################################
@@ -1883,7 +1725,6 @@ def mixedLayerDepthS(S,d,delS, ref_depth=10.0):
         else:
             return d[k-1]
     return d[len(S)-1]
-
 
 #
 ########################################################################
