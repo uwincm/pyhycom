@@ -841,7 +841,7 @@ def ab2nc(filename):
         plon=getField('plon',regional_grid_fn,np.NaN)
         plat=getField('plat',regional_grid_fn,np.NaN)
         #
-        ncfn=filename[:-1]+'nc'
+        ncfn=filename[:-1]+'nc' ; print(ncfn)
         ncfile=Dataset(ncfn,'w',format='NETCDF3_CLASSIC') # Open file
         #
         ncfile.createDimension('Longitude',size=idm) # Create x-dim
@@ -861,11 +861,9 @@ def ab2nc(filename):
             record=record+1
         ncfile.close() # Close file
         #
-    return ncfn
 
 
-
-    if filename.rfind('relax')>-1:
+    elif filename.rfind('relax')>-1:
         #
         # Read forcing.[field].b file:
         f=open(filename[:-1]+'b','r')
