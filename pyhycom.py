@@ -847,7 +847,54 @@ def ab2nc(filename):
                 nc_field=ncfile.createVariable('layer_top_depth',datatype='f4',dimensions=('time','layer','Y','X'))
                 print(nc_field)
                 nc_field[:]=layer_top_depth
-                
+
+
+        ## Add attributes.
+        ncfile['bathymetry'].long_name = 'Bathymetry'
+        ncfile['bathymetry'].units = 'm'
+        ncfile['u_btrop'].long_name = 'Zonal Component of Barotropic Current'
+        ncfile['u_btrop'].units = 'm s-1'
+        ncfile['v_btrop'].long_name = 'Meridional Component of Barotropic Current'
+        ncfile['v_btrop'].units = 'm s-1'
+        ncfile['mix_dpth'].long_name = 'Mixing Depth (Pressure Coordinates)'
+        ncfile['mix_dpth'].description = 'Mixing depth determined by the HYCOM mixing physics. In pressure coordinates. Divide by 9806 to get meters.'
+        ncfile['mix_dpth'].units = 'Pa'
+        ncfile['srfhgt'].long_name = 'Sea Surface Height (Original Units)'
+        ncfile['srfhgt'].description = 'Height of the sea surface (SSH). In original HYCOM [ab] file units. Divide by 9.806 to get meters (following archv2data2d.f). Note: HYCOM dynamics only care about the spatial gradients of SSH, not the absolute value. The absolute value is set such that the global mean SSH is near zero.'
+        ncfile['srfhgt'].units = '9.806 m'
+        ncfile['srfhgt'].units_details = 'HYCOM includes the program archv2data2d.f to convert the raw [ab] data to .nc, with sensible units. The line numbers and code it uses to convert srfhgt follow. 42:      data      thref/1.e-3/,spcifh/3990./; 512:        srfht( i,j)=srfht( i,j)/(thref*98.06)  ! cm; util1(i,j)=0.01*srfht(i,j)  !MKS; Then util1 is written to the NetCDF file with units of m. This implies there is a factor of 0.01/(0.001*98.06) = 1/9.806 to convert from raw [ab] data to meters.'
+
+        
+        ncfile['temp'].long_name = 'Water Temperature'
+        ncfile['temp'].description = 'Water temperature of the HYCOM layer.'
+        ncfile['temp'].units = 'deg. C'
+        ncfile['salin'].long_name = 'Salinity'
+        ncfile['salin'].description = 'Salinity of the HYCOM layer.'
+        ncfile['salin'].units = 'PSU'
+        ncfile['u-vel'].long_name = 'Zonal Component of Baroclinic Current'
+        ncfile['u-vel'].description = 'Zonal component of baroclinic current of the HYCOM layer. Note: Add the 2-D barotropic zonal current u_btrop to each layer to get the full 2-D zonal current.'
+        ncfile['u-vel'].units = 'm s-1'
+        ncfile['v-vel'].long_name = 'Meridional Component of Baroclinic Current'
+        ncfile['v-vel'].description = 'Meridional component of baroclinic current of the HYCOM layer. Note: Add the 2-D barotropic meridional current v_btrop to each layer to get the full 3-D zonal current.'
+        ncfile['v-vel'].units = 'm s-1'
+
+        ncfile['thknss'].long_name = 'HYCOM Layer Thickness (Pressure Coordinates)'
+        ncfile['thknss'].description = 'Thickness of the HYCOM layer in pressure coordinates. Divide by 9806 to get meters.'
+        ncfile['thknss'].units = 'Pa'
+
+        ncfile['layer_bottom_depth'].long_name = 'Depth of HYCOM Layer (Bottom)'
+        ncfile['layer_bottom_depth'].description = 'Depth of the bottom of the HYCOM layer.'
+        ncfile['layer_bottom_depth'].units = 'm'
+        ncfile['layer_middle_depth'].long_name = 'Depth of HYCOM Layer (Middle)'
+        ncfile['layer_middle_depth'].description = 'Depth of the middle of the HYCOM layer.'
+        ncfile['layer_middle_depth'].units = 'm'
+        ncfile['layer_top_depth'].long_name = 'Depth of HYCOM Layer (Top)'
+        ncfile['layer_top_depth'].description = 'Depth of the top of the HYCOM layer.'
+        ncfile['layer_top_depth'].units = 'm'
+
+        ncfile.description = 'HYCOM output on the native hybrid layers.'
+        ncfile.history = 'Converted from HYCOM .[ab] format to NetCDF using the ab2nc function of pyhycom.py'
+        
         ncfile.close() # Close file
     #
     #--------------------------------------------------------------------------------------------------
