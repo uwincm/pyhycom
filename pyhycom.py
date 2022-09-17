@@ -818,6 +818,36 @@ def ab2nc(filename):
                 nc_field=ncfile.createVariable(field,datatype='f4',dimensions=('time','layer','Y','X'))
             print(nc_field)
             nc_field[:]=ab_field
+
+            ## IF this field is "thknss", use it to derive layer depths.
+            if field == 'thknss':
+                
+                layer_bottom_depth = 0.0 * ab_field
+                layer_top_depth = 0.0 * ab_field
+                layer_middle_depth = 0.0 * ab_field
+                for kk in range(kdm):
+                    if kk == 0:
+                        layer_bottom_depth[kk,:,:] = ab_field[kk,:,:]/9806.0
+                        layer_middle_depth[kk,:,:] = 0.5*ab_field[kk,:,:]/9806.0
+                        ## Top depth: Keep it as Zero.
+                    else:
+                        layer_bottom_depth[kk,:,:] = layer_bottom_depth[kk-1,:,:] + ab_field[kk,:,:]/9806.0
+                        layer_middle_depth[kk,:,:] = 0.5*(layer_bottom_depth[kk-1,:,:] + layer_bottom_depth[kk,:,:])
+                        layer_top_depth[kk,:,:] = 1.0*layer_bottom_depth[kk-1,:,:]
+                        
+                ## Write the layer depths.
+                nc_field=ncfile.createVariable('layer_bottom_depth',datatype='f4',dimensions=('time','layer','Y','X'))
+                print(nc_field)
+                nc_field[:]=layer_bottom_depth
+                
+                nc_field=ncfile.createVariable('layer_middle_depth',datatype='f4',dimensions=('time','layer','Y','X'))
+                print(nc_field)
+                nc_field[:]=layer_middle_depth
+
+                nc_field=ncfile.createVariable('layer_top_depth',datatype='f4',dimensions=('time','layer','Y','X'))
+                print(nc_field)
+                nc_field[:]=layer_top_depth
+                
         ncfile.close() # Close file
     #
     #--------------------------------------------------------------------------------------------------
