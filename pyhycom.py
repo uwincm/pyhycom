@@ -848,6 +848,13 @@ def ab2nc(filename):
                 print(nc_field)
                 nc_field[:]=layer_top_depth
 
+            ## IF this field is "srfhgt", use it to derive SSH in meters.
+            if field == 'srfhgt':
+
+                ## Write the SSH, with the 9.806 factor.
+                nc_field=ncfile.createVariable('SSH',datatype='f4',dimensions=('time','Y','X'))
+                print(nc_field)
+                nc_field[:]=ab_field / 9.806
 
         ## Add attributes.
         ncfile['bathymetry'].long_name = 'Bathymetry'
@@ -860,9 +867,13 @@ def ab2nc(filename):
         ncfile['mix_dpth'].description = 'Mixing depth determined by the HYCOM mixing physics. In pressure coordinates. Divide by 9806 to get meters.'
         ncfile['mix_dpth'].units = 'Pa'
         ncfile['srfhgt'].long_name = 'Sea Surface Height (Original Units)'
-        ncfile['srfhgt'].description = 'Height of the sea surface (SSH). In original HYCOM [ab] file units. Divide by 9.806 to get meters (following archv2data2d.f). Note: HYCOM dynamics only care about the spatial gradients of SSH, not the absolute value. The absolute value is set such that the global mean SSH is near zero.'
+        ncfile['srfhgt'].description = 'Height of the sea surface (SSH). In original HYCOM [ab] file units. Divide by 9.806 to get meters (following archv2data2d.f). Note: HYCOM dynamics only care about the spatial gradients of SSH, not the absolute value. The absolute value is set such that the global mean SSH is near zero, but it varies regionally.'
         ncfile['srfhgt'].units = '9.806 m'
         ncfile['srfhgt'].units_details = 'HYCOM includes the program archv2data2d.f to convert the raw [ab] data to .nc, with sensible units. The line numbers and code it uses to convert srfhgt follow. 42:      data      thref/1.e-3/,spcifh/3990./; 512:        srfht( i,j)=srfht( i,j)/(thref*98.06)  ! cm; util1(i,j)=0.01*srfht(i,j)  !MKS; Then util1 is written to the NetCDF file with units of m. This implies there is a factor of 0.01/(0.001*98.06) = 1/9.806 to convert from raw [ab] data to meters.'
+
+        ncfile['SSH'].long_name = 'Sea Surface Height (meters)'
+        ncfile['SSH'].description = 'Height of the sea surface (SSH). Converted from the original HYCOM [ab] file units to meters. (See description for srfhgt). Note: HYCOM dynamics only care about the spatial gradients of SSH, not the absolute value. The absolute value is set such that the global mean SSH is near zero, but it varies regionally.'
+        ncfile['SSH'].units = 'm'
 
         
         ncfile['temp'].long_name = 'Water Temperature'
