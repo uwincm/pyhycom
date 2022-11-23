@@ -744,7 +744,7 @@ def ab2nc(filename):
         from matplotlib.dates import num2date
         #
         # Read archv.b file:
-        f=open(filename[:-1]+'b','r')
+        f = open(get_b_filename(filename), 'r')
         file_content=[line.rstrip() for line in f.readlines()]
         f.close()
         idm=int(file_content[7][0:5])    # Get X-dim size
@@ -767,16 +767,25 @@ def ab2nc(filename):
         bathy = getBathymetry(regional_depth_fn,undef=np.nan)
         #
         # Compute a current datetime instance:
-        day_in_year=int(filename[-8:-5])
-        hour=filename[-4:-2]
-        year=int(filename[-13:-9])
+        if '.gz' in filename:
+            day_in_year=int(filename[-11:-8])
+            hour=filename[-7:-5]
+            year=int(filename[-16:-12])
+        else:
+            day_in_year=int(filename[-8:-5])
+            hour=filename[-4:-2]
+            year=int(filename[-13:-9])
         day_since_0001_01_01=(year-1)*365+year/4-year/100+year/400+day_in_year
         now=num2date(day_since_0001_01_01)
         date_string=str(now.year)+str2(now.month)+str2(now.day)+'_'+hour
-        #
-        print('Working on','archv.'+date_string+'.nc')
-        #ncfn = ('archv.'+date_string+'.nc')
-        ncfn = (filename[0:-2]+'.nc')
+
+        if '.gz' in filename:
+            ncfn = (filename[0:-5]+'.nc')
+        else:
+            ncfn = (filename[0:-2]+'.nc')
+        
+        print('Working on: ',ncfn)
+            
         ncfile=Dataset(ncfn,'w',format='NETCDF4_CLASSIC') # Open file
         #
         ncfile.createDimension('X',size=idm) # Create x-dim
