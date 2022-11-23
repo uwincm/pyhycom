@@ -784,6 +784,10 @@ def ab2nc(filename):
         else:
             ncfn = (filename[0:-2]+'.nc')
         #
+        # Make sure output goes to the current local directory,
+        # where you presumably have write access.
+        ncfn = os.path.basename(ncfn)
+        #
         print('Working on: ',ncfn)
         #    
         ncfile=Dataset(ncfn,'w',format='NETCDF4_CLASSIC') # Open file
