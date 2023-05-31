@@ -80,7 +80,7 @@ def getDims(filename):
             jdmFound = True
         if idmFound and jdmFound:break
     #
-    if 'arch' in filename:
+    if 'arch' in filename.split('/')[-1]:
         kdm = int(f[-1].split()[4])
         return (kdm,jdm,idm)
     else:
