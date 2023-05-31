@@ -1010,7 +1010,7 @@ def ab2nc(filename):
         file_content=[line.rstrip() for line in f.readlines()]
         f.close()
         for iiii in range(len(file_content)):
-            if file_content[iiii].rfind('min, max')>-1 or file_content[iiii].rfind('layer,tlevel,range')>-1:
+            if file_content[iiii].rfind('min, max')>-1 or file_content[iiii].rfind('min,max') >-1 or file_content[iiii].rfind('layer,tlevel,range')>-1:
                 sindx = iiii
                 break
         kdm=len(file_content)-sindx ;  # int(file_content[-1][33:35]) # Get number of entries.
