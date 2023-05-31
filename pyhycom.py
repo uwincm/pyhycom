@@ -92,8 +92,8 @@ def getFieldIndex(field,filename):
     Function description
     """
     f = getTextFile(get_b_filename(filename))
-    if 'arch' in filename:f = f[10:]
-    if 'grid' in filename:f = f[3:]
+    if 'arch' in filename.split('/')[-1]:f = f[10:]
+    if 'grid' in filename.split('/')[-1]:f = f[3:]
     fieldIndex = []
     for line in f:
         if field == line.split()[0].replace('.','').replace(':',''):
