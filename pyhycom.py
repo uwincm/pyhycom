@@ -942,7 +942,7 @@ def ab2nc(filename):
         plon=getField('plon',regional_grid_fn,np.NaN)
         plat=getField('plat',regional_grid_fn,np.NaN)
         #
-        ncfn=filename[:-1]+'nc' ; print(ncfn)
+        ncfn=filename[:-1]+'nc'
         ncfile=Dataset(ncfn,'w',format='NETCDF3_CLASSIC') # Open file
         #
         ncfile.createDimension('Longitude',size=idm) # Create x-dim
@@ -1450,7 +1450,6 @@ def ncz2ab(filename,baclin=60,interp=True):
         uI = np.nan*np.zeros([kdm,SI[0],SI[1]])
         vI = np.nan*np.zeros([kdm,SI[0],SI[1]])
 
-        #for k in [0,1,2]:
         for k in range(kdm):
             print('--> Level {} of {}.'.format(k+1,kdm))
             tI[k] = do_interp(lon,lat,t[k,:,:],lonI,latI)
@@ -1553,7 +1552,7 @@ def ncz2ab(filename,baclin=60,interp=True):
         ## Hack to fix some remaining isolated weird values.
         ## (Presumably at the edges of bathymetry features near the bottom)
         ## (ALSO DONE FOR S, U, V BELOW!!!)
-        hack_points = [t_2d < -100.0]
+        hack_points = t_2d < -100.0
         t_2d[hack_points] = t_bottom[hack_points]
         t[k,:,:] = t_2d
 
@@ -1563,8 +1562,8 @@ def ncz2ab(filename,baclin=60,interp=True):
         s[k,:,:] = s_2d
 
         sigma_2d = sigma[k,:,:]
-        sigma_2d[bathy - z_bottom[k,:,:] < 0.0] = np.nan #sigma_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        sigma_2d[hack_points] = np.nan #sigma_bottom[hack_points]
+        sigma_2d[bathy - z_bottom[k,:,:] < 0.0] = np.nan
+        sigma_2d[hack_points] = np.nan
         sigma[k,:,:] = sigma_2d
 
         u_2d = u[k,:,:]
@@ -1576,13 +1575,6 @@ def ncz2ab(filename,baclin=60,interp=True):
         v_2d[bathy - z_bottom[k,:,:] < 0.0] = v_bottom[bathy - z_bottom[k,:,:] < 0.0]
         v_2d[hack_points] = v_bottom[hack_points]
         v[k,:,:] = v_2d
-
-
-
-    # plt.pcolormesh(u_btrop) ; plt.colorbar() ;  plt.show()
-    # plt.pcolormesh(u_layer_mean[38,:,:]) ; plt.colorbar() ;  plt.show()
-    # plt.pcolormesh(t_layer_mean[38,:,:]) ; plt.colorbar() ;  plt.show()
-
 
     ############################################################################
 
