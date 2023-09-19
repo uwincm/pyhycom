@@ -4,6 +4,7 @@ pyhycom.py
 A Python interface to HYCOM files.
 """
 import numpy as np
+import datetime as dt
 import gzip
 import os
 
@@ -772,12 +773,17 @@ def ab2nc(filename):
         #
         if '.gz' in filename:
             day_in_year=int(filename[-11:-8])
-            hour=filename[-7:-5]
+            hour=int(filename[-7:-5])
             year=int(filename[-16:-12])
         else:
             day_in_year=int(filename[-8:-5])
-            hour=filename[-4:-2]
+            hour=int(filename[-4:-2])
             year=int(filename[-13:-9])
+        #
+        ncfn_datetime = (dt.datetime(year,1,1,0,0,0)
+            + dt.timedelta(days=day_in_year-1)
+            + dt.timedelta(hours=hour))
+        ncfn_timestamp = (ncfn_datetime - dt.datetime(1970,1,1,0,0,0)).total_seconds()/3600.0
         #
         if '.gz' in filename:
             ncfn = (filename[0:-5]+'.nc')
@@ -808,6 +814,10 @@ def ab2nc(filename):
 
         print(plon.shape)
         print(plat.shape)
+
+        nc_field=ncfile.createVariable('time',datatype='f4',dimensions=('time',))
+        nc_field[:]=ncfn_timestamp
+        nc_field.units = 'hours since 1970-1-1 0:0'
 
         nc_field=ncfile.createVariable('longitude',datatype='f4',dimensions=('Y','X'))
         nc_field[:]=plon[0:jdm,0:idm]
