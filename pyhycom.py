@@ -1320,6 +1320,61 @@ def do_interp(lon,lat,data,lonI,latI):
     return dataI
 
 
+def do_horizontal_interp(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
+    steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
+    lon_sur, lat_sur, t, s, u, v, kdm, lonI, latI):
+    """
+    Horizontally interpolate ocean fields to regional grid.
+    
+    Returns tuple of interpolated fields:
+    (ssh, t_bottom, s_bottom, u_bottom, v_bottom, steric, surflx, salflx, 
+        bl_dpth, mix_dpth, u_btrop, v_btrop, t, s, u, v)
+    """
+    
+    ## Interpolate surface/2d fields.
+    print('Interp ssh.')
+    ssh = do_interp(lon, lat, ssh, lonI, latI)
+    print('Interp t_bottom.')
+    t_bottom = do_interp(lon, lat, t_bottom, lonI, latI)
+    print('Interp s_bottom.')
+    s_bottom = do_interp(lon, lat, s_bottom, lonI, latI)
+    print('Interp u_bottom.')
+    u_bottom = do_interp(lon, lat, u_bottom, lonI, latI)
+    print('Interp v_bottom.')
+    v_bottom = do_interp(lon, lat, v_bottom, lonI, latI)
+    print('Interp steric.')
+    steric = do_interp(lon_sur, lat_sur, steric, lonI, latI)
+    print('Interp mixflx.')
+    surflx = do_interp(lon_sur, lat_sur, surflx, lonI, latI)
+    print('Interp salflx.')
+    salflx = do_interp(lon_sur, lat_sur, salflx, lonI, latI)
+    print('Interp bl_dpth.')
+    bl_dpth = do_interp(lon_sur, lat_sur, bl_dpth, lonI, latI)
+    print('Interp mix_dpth.')
+    mix_dpth = do_interp(lon_sur, lat_sur, mix_dpth, lonI, latI)
+    print('u_btrop.')
+    u_btrop = do_interp(lon_sur, lat_sur, u_btrop, lonI, latI)
+    print('v_btrop.')
+    v_btrop = do_interp(lon_sur, lat_sur, v_btrop, lonI, latI)
+
+    ## Now do the 3-D fields.
+    print('Interp 3-D Fields.')
+    SI = ssh.shape
+    tI = np.nan * np.zeros([kdm, SI[0], SI[1]])
+    sI = np.nan * np.zeros([kdm, SI[0], SI[1]])
+    uI = np.nan * np.zeros([kdm, SI[0], SI[1]])
+    vI = np.nan * np.zeros([kdm, SI[0], SI[1]])
+
+    for k in range(kdm):
+        print('--> Level {} of {}.'.format(k+1, kdm))
+        tI[k] = do_interp(lon, lat, t[k, :, :], lonI, latI)
+        sI[k] = do_interp(lon, lat, s[k, :, :], lonI, latI)
+        uI[k] = do_interp(lon, lat, u[k, :, :], lonI, latI)
+        vI[k] = do_interp(lon, lat, v[k, :, :], lonI, latI)
+
+    
+    return (ssh, t_bottom, s_bottom, u_bottom, v_bottom, steric, surflx, salflx,
+            bl_dpth, mix_dpth, u_btrop, v_btrop, tI, sI, uI, vI)
 
 
 def ncz2ab(filename,baclin=60,interp=True):
@@ -1428,57 +1483,23 @@ def ncz2ab(filename,baclin=60,interp=True):
 
     ###
     ### Interp if specified.
-    ###
+
     if interp:
+        print('Interpolating to regional grid.')
 
-        lonI = getField('plon','regional.grid.a') #+360.0 ## 2-D, not necessarily rectangular.
-        latI = getField('plat','regional.grid.a') ## 2-D, not necessarily rectangular.
-        print(np.nanmax(lonI))
-        ## Interpolate surface/2d fields.
-        print('Interp ssh.')
-        ssh = do_interp(lon,lat,ssh,lonI,latI)
-        print('Interp t_bottom.')
-        t_bottom = do_interp(lon,lat,t_bottom,lonI,latI)
-        print('Interp s_bottom.')
-        s_bottom = do_interp(lon,lat,s_bottom,lonI,latI)
-        print('Interp u_bottom.')
-        u_bottom = do_interp(lon,lat,u_bottom,lonI,latI)
-        print('Interp v_bottom.')
-        v_bottom = do_interp(lon,lat,v_bottom,lonI,latI)
-        print('Interp steric.')
-        steric = do_interp(lon_sur,lat_sur,steric,lonI,latI)
-        print('Interp mixflx.')
-        surflx = do_interp(lon_sur,lat_sur,surflx,lonI,latI)
-        print('Interp salflx.')
-        salflx = do_interp(lon_sur,lat_sur,salflx,lonI,latI)
-        print('Interp bl_dpth.')
-        bl_dpth = do_interp(lon_sur,lat_sur,bl_dpth,lonI,latI)
-        print('Interp mix_dpth.')
-        mix_dpth = do_interp(lon_sur,lat_sur,mix_dpth,lonI,latI)
-        print('u_btrop.')
-        u_btrop = do_interp(lon_sur,lat_sur,u_btrop,lonI,latI)
-        print('v_btrop.')
-        v_btrop = do_interp(lon_sur,lat_sur,v_btrop,lonI,latI)
+        ## Get regional grid info.
+        grid_lon = getField('plon','regional.grid.a') #+360.0 ## 2-D, not necessarily rectangular.
+        print("Longitude range: ", (np.nanmin(grid_lon)), (np.nanmax(grid_lon)))
+        grid_lat = getField('plat','regional.grid.a') ## 2-D, not necessarily rectangular.
+        print("Latitude range: ", (np.nanmin(grid_lat)), (np.nanmax(grid_lat)))
 
-        ## Now do the 3-D fields.
-        print('Interp 3-D Fields.')
-        SI = ssh.shape
-        tI = np.nan*np.zeros([kdm,SI[0],SI[1]])
-        sI = np.nan*np.zeros([kdm,SI[0],SI[1]])
-        uI = np.nan*np.zeros([kdm,SI[0],SI[1]])
-        vI = np.nan*np.zeros([kdm,SI[0],SI[1]])
-
-        for k in range(kdm):
-            print('--> Level {} of {}.'.format(k+1,kdm))
-            tI[k] = do_interp(lon,lat,t[k,:,:],lonI,latI)
-            sI[k] = do_interp(lon,lat,s[k,:,:],lonI,latI)
-            uI[k] = do_interp(lon,lat,u[k,:,:],lonI,latI)
-            vI[k] = do_interp(lon,lat,v[k,:,:],lonI,latI)
-
-        t = tI.copy()
-        s = sI.copy()
-        u = uI.copy()
-        v = vI.copy()
+        ## Do the interp.
+        ssh, t_bottom, s_bottom, u_bottom, v_bottom, steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop, t, s, u, v = do_horizontal_interp(
+            lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom, 
+            steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop, 
+            lon_sur, lat_sur, t, s, u, v, kdm,
+            lonI=grid_lon, latI=grid_lat
+        )
 
     ## Get Density.
     sigma = sigma2_12term(t,s)
