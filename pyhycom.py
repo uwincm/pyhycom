@@ -1450,6 +1450,58 @@ def write_zlev_ab_files(fn_base, this_datetime, ssh, steric, surflx, salflx,
         append_field_to_a_file(fna,s,k)
 
 
+def calc_dp(t, s, u, v, z, bathy, kdm, nx, ny):
+    """
+    Calculate layer thicknesses (dp) based on z-levels and bathymetry.
+    """
+
+    ## Layer Thickness
+    dp = 0.0*t
+    dz = 0.0*t
+    z_bottom = 0.0*t
+    z_top = 0.0*t
+
+    ## treat z=0 as 0 to half of first depth.
+    z_top[0,:,:] = 0.0
+    z_bottom[0,:,:] = 0.5*z[1]
+
+    ## Do the middle
+    for k in range(1, kdm-1):
+        z_top[k,:,:] = 0.5*(z[k] + z[k-1])
+        z_bottom[k,:,:] = 0.5*(z[k] + z[k+1])
+
+    ## Treat last level as half way beteen (kdm-1,kdm) to the bottom.
+    z_top[kdm-1,:,:] = 0.5*(z[kdm-1] + z[kdm-2])
+    z_bottom[kdm-1,:,:] = bathy
+
+    dz = z_bottom - z_top
+
+    ## Refine if I'm near the bottom.
+    for k in range(kdm):
+        for jj in range(ny):
+            for ii in range(nx):
+                if z_top[k,jj,ii] < bathy[jj,ii] and z_bottom[k,jj,ii] > bathy[jj,ii]:
+                    dz[k,jj,ii] = bathy[jj,ii] - z_top[k,jj,ii] + 10.0
+                if z_top[k,jj,ii] > bathy[jj,ii]:
+                    dz[k,jj,ii] = 0.0
+
+    dp = dz * 9806 # meters to pressure.
+
+    return dp, z_bottom
+
+
+def mask_bottom(bathy, z_bottom, kdm):
+    """
+    Create a 3-D mask array where True indicates below bottom.
+    """
+    z_mask = 0.0*z_bottom
+    for k in range(0, kdm):
+        z_mask_2d = 0.0*bathy
+        z_mask_2d[bathy - z_bottom[k,:,:] < 0.0] = 1
+        z_mask[k,:,:] = z_mask_2d
+    z_mask = z_mask > 0.5
+    return z_mask
+
 
 def ncz2ab(filename,baclin=60,interp=True):
     """
@@ -1607,49 +1659,13 @@ def ncz2ab(filename,baclin=60,interp=True):
     ### Manage layering.
     ###
 
-    ## Layer Thickness
-    dp = 0.0*t
-    dz = 0.0*t
-    z_bottom = 0.0*t
-    z_top = 0.0*t
-    z_mask = 0.0*t
-
-
-    ## treat z=0 as 0 to half of first depth.
-    z_top[0,:,:] = 0.0
-    z_bottom[0,:,:] = 0.5*z[1]
-
-    ## Do the middle
-    for k in range(1, kdm-1):
-        z_top[k,:,:] = 0.5*(z[k] + z[k-1])
-        z_bottom[k,:,:] = 0.5*(z[k] + z[k+1])
-
-    ## Treat last level as half way beteen (kdm-1,kdm) to the bottom.
-    z_top[kdm-1,:,:] = 0.5*(z[kdm-1] + z[kdm-2])
-    z_bottom[kdm-1,:,:] = bathy
-
-    dz = z_bottom - z_top
-
-    ## Refine if I'm near the bottom.
-    for k in range(kdm):
-        for jj in range(ny):
-            for ii in range(nx):
-                if z_top[k,jj,ii] < bathy[jj,ii] and z_bottom[k,jj,ii] > bathy[jj,ii]:
-                    dz[k,jj,ii] = bathy[jj,ii] - z_top[k,jj,ii] + 10.0
-                if z_top[k,jj,ii] > bathy[jj,ii]:
-                    dz[k,jj,ii] = 0.0
-
-    dp = dz * 9806 # meters to pressure.
+    dp, z_bottom = calc_dp(t, s, u, v, z, bathy, kdm, nx, ny)
 
     ###
     ### Bottom of the sea mask for 3-D variables.
     ###
 
-    for k in range(0, kdm):
-        z_mask_2d = 0.0*bathy
-        z_mask_2d[~np.isfinite(bathy)] = 1
-        z_mask[k,:,:] = z_mask_2d
-    z_mask = z_mask > 0.5
+    z_mask = mask_bottom(bathy, z_bottom, kdm)
 
     dp = ma.masked_array(dp.data,mask=z_mask)
     t = ma.masked_array(t.data,mask=z_mask)
