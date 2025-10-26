@@ -1402,15 +1402,27 @@ def ncz2ab(filename,baclin=60,interp=True):
     with Dataset(fn_ts) as ds:
         z = ds['depth'][:]
         t = ds['water_temp'][:][0]
-        t_bottom = ds['water_temp_bottom'][:][0]
+        try:
+            t_bottom = ds['water_temp_bottom'][:][0]
+        except KeyError:
+            t_bottom = t[-1,:,:]  # Set to the lowest level of water_temp
         s = ds['salinity'][:][0]
-        s_bottom = ds['salinity_bottom'][:][0]
+        try:
+            s_bottom = ds['salinity_bottom'][:][0]
+        except KeyError:
+            s_bottom = s[-1,:,:]  # Set to the lowest level of salinity
     print(fn_uv)
     with Dataset(fn_uv) as ds:
         u = ds['water_u'][:][0]
-        u_bottom = ds['water_u_bottom'][:][0]
+        try:
+            u_bottom = ds['water_u_bottom'][:][0]
+        except KeyError:
+            u_bottom = u[-1,:,:]  # Set to the lowest level of u
         v = ds['water_v'][:][0]
-        v_bottom = ds['water_v_bottom'][:][0]
+        try:
+            v_bottom = ds['water_v_bottom'][:][0]
+        except KeyError:
+            v_bottom = v[-1,:,:]  # Set to the lowest level of v
     kdm = len(z)
     bathy = getBathymetry('regional.depth.a')
 
