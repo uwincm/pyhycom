@@ -1377,6 +1377,80 @@ def do_horizontal_interp(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
             bl_dpth, mix_dpth, u_btrop, v_btrop, tI, sI, uI, vI)
 
 
+def write_zlev_ab_files(fn_base, this_datetime, ssh, steric, surflx, salflx,
+    bl_dpth, mix_dpth, u_btrop, v_btrop,
+    sigma, t, s, u, v, dp, baclin=60):
+    """
+    Write out HYCOM .a and .b files for z-level data.
+    """
+    S = t.shape
+    kdm = S[0]
+    ny = S[1]
+    nx = S[2]
+
+    # Start the files.
+    fna = fn_base + '.a'
+    fnb = fn_base + '.b'
+
+    fileb = open(fnb,'w')
+    fileb.write("0.281c NAVGEM wind, thermal, precip 3-hrly forcing ; LWcorr; GDEM42 SSS relax;\n")
+    fileb.write("17T Sigma2*; GDEM4 Jan init; KPP; SeaWiFS KPAR; HYCOM+CICE; A=20;Smag=.05;\n")
+    fileb.write("Z(7):1-7,Z(16):8,Z(2):10-16,Z(13):dp00/f/x=36/1.18/262;Z(3):400-600m; NOGAPSsnow\n")
+    fileb.write("GLBa0.08 archive subregioned to NWPa0.08\n")
+    fileb.write("   22    'iversn' = hycom version number x10\n")
+    fileb.write("  930    'iexpt ' = experiment number x10\n")
+    fileb.write("    3    'yrflag' = days in year flag\n")
+    fileb.write(" {0:4d}    'idm   ' = longitudinal array size\n".format(nx))
+    fileb.write(" {0:4d}    'jdm   ' = latitudinal  array size\n".format(ny))
+    fileb.write("field       time step  model day  k  dens        min              max")
+    fileb.close()
+
+    filea = open(fna,'wb')
+    filea.close()
+
+    #### Write surface variables.
+    ## First variable is required to be the Montgomery Potential "montg1"
+    ## It looks like HYCOM discards the *values* and will calculate it on its own.
+    ## Therefore, I'm trying a bunch of zeros here!
+    ## For montg1, the equation of state is specified by "k  dens" = sigver  thbase
+    ##   which for global HYCOM is 6, 34.
+    ##   so we need to override k and dens in the "b" file.
+    append_field_to_b_file(fnb,0.0*ssh,-1,'montg1',this_datetime,baclin,34.0,k_override=6)
+    append_field_to_a_file(fna,0.0*ssh,-1)
+
+    ## Surface variables are assigned density of zero.
+    append_field_to_b_file(fnb,(100.0/9.8)*ssh,-1,'srfhgt',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,(100.0/9.8)*ssh,-1)
+    append_field_to_b_file(fnb,(100.0/9.8)*steric,-1,'steric',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,(100.0/9.8)*steric,-1)
+    append_field_to_b_file(fnb,surflx,-1,'surflx',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,surflx,-1)
+    append_field_to_b_file(fnb,salflx,-1,'salflx',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,salflx,-1)
+    append_field_to_b_file(fnb,9806.0*bl_dpth,-1,'bl_dpth',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,9806.0*bl_dpth,-1)
+    append_field_to_b_file(fnb,9806.0*mix_dpth,-1,'mix_dpth',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,9806.0*mix_dpth,-1)
+    append_field_to_b_file(fnb,u_btrop,-1,'u_btrop',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,u_btrop,-1)
+    append_field_to_b_file(fnb,v_btrop,-1,'v_btrop',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,v_btrop,-1)
+
+    for k in range(0,kdm):
+        sigma_mean = np.nanmean(sigma[k,:,:])
+        append_field_to_b_file(fnb,u,k,'u-vel.',this_datetime,baclin,sigma_mean)
+        append_field_to_a_file(fna,u,k)
+        append_field_to_b_file(fnb,v,k,'v-vel.',this_datetime,baclin,sigma_mean)
+        append_field_to_a_file(fna,v,k)
+        append_field_to_b_file(fnb,dp,k,'thknss',this_datetime,baclin,sigma_mean)
+        append_field_to_a_file(fna,dp,k)
+        append_field_to_b_file(fnb,t,k,'temp',this_datetime,baclin,sigma_mean)
+        append_field_to_a_file(fna,t,k)
+        append_field_to_b_file(fnb,s,k,'salin',this_datetime,baclin,sigma_mean)
+        append_field_to_a_file(fna,s,k)
+
+
+
 def ncz2ab(filename,baclin=60,interp=True):
     """
     Convert NetCDF z level data from hycom.org in to binary [ab] files
@@ -1619,74 +1693,20 @@ def ncz2ab(filename,baclin=60,interp=True):
 
     ############################################################################
 
-    n_levels = len(z)
-    print('Saving surface data and {} layers.'.format(n_levels))
 
     ###
     ### Write Output.
     ###
 
-    # Start the files.
-    fna = this_datetime.strftime('archv.%Y_%j_%H.a')
-    fnb = this_datetime.strftime('archv.%Y_%j_%H.b')
+    n_levels = len(z)
+    fn_base = this_datetime.strftime('archv.%Y_%j_%H')
+    print('Saving surface data and {} layers to {}.a and {}.b.'.format(
+        n_levels, fn_base, fn_base)
+    )
 
-    fileb = open(fnb,'w')
-    fileb.write("0.281c NAVGEM wind, thermal, precip 3-hrly forcing ; LWcorr; GDEM42 SSS relax;\n")
-    fileb.write("17T Sigma2*; GDEM4 Jan init; KPP; SeaWiFS KPAR; HYCOM+CICE; A=20;Smag=.05;\n")
-    fileb.write("Z(7):1-7,Z(16):8,Z(2):10-16,Z(13):dp00/f/x=36/1.18/262;Z(3):400-600m; NOGAPSsnow\n")
-    fileb.write("GLBa0.08 archive subregioned to NWPa0.08\n")
-    fileb.write("   22    'iversn' = hycom version number x10\n")
-    fileb.write("  930    'iexpt ' = experiment number x10\n")
-    fileb.write("    3    'yrflag' = days in year flag\n")
-    fileb.write(" {0:4d}    'idm   ' = longitudinal array size\n".format(nx))
-    fileb.write(" {0:4d}    'jdm   ' = latitudinal  array size\n".format(ny))
-    fileb.write("field       time step  model day  k  dens        min              max")
-    fileb.close()
-
-    filea = open(fna,'wb')
-    filea.close()
-
-    #### Write surface variables.
-    ## First variable is required to be the Montgomery Potential "montg1"
-    ## It looks like HYCOM discards the *values* and will calculate it on its own.
-    ## Therefore, I'm trying a bunch of zeros here!
-    ## For montg1, the equation of state is specified by "k  dens" = sigver  thbase
-    ##   which for global HYCOM is 6, 34.
-    ##   so we need to override k and dens in the "b" file.
-    append_field_to_b_file(fnb,0.0*ssh,-1,'montg1',this_datetime,baclin,34.0,k_override=6)
-    append_field_to_a_file(fna,0.0*ssh,-1)
-
-    ## Surface variables are assigned density of zero.
-    append_field_to_b_file(fnb,(100.0/9.8)*ssh,-1,'srfhgt',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,(100.0/9.8)*ssh,-1)
-    append_field_to_b_file(fnb,(100.0/9.8)*steric,-1,'steric',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,(100.0/9.8)*steric,-1)
-    append_field_to_b_file(fnb,surflx,-1,'surflx',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,surflx,-1)
-    append_field_to_b_file(fnb,salflx,-1,'salflx',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,salflx,-1)
-    append_field_to_b_file(fnb,9806.0*bl_dpth,-1,'bl_dpth',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,9806.0*bl_dpth,-1)
-    append_field_to_b_file(fnb,9806.0*mix_dpth,-1,'mix_dpth',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,9806.0*mix_dpth,-1)
-    append_field_to_b_file(fnb,u_btrop,-1,'u_btrop',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,u_btrop,-1)
-    append_field_to_b_file(fnb,v_btrop,-1,'v_btrop',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,v_btrop,-1)
-
-    for k in range(0,40):
-        sigma_mean = np.nanmean(sigma[k,:,:])
-        append_field_to_b_file(fnb,u,k,'u-vel.',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,u,k)
-        append_field_to_b_file(fnb,v,k,'v-vel.',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,v,k)
-        append_field_to_b_file(fnb,dp,k,'thknss',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,dp,k)
-        append_field_to_b_file(fnb,t,k,'temp',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,t,k)
-        append_field_to_b_file(fnb,s,k,'salin',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,s,k)
-
+    write_zlev_ab_files(fn_base, this_datetime, ssh, steric, surflx, salflx,
+        bl_dpth, mix_dpth, u_btrop, v_btrop,
+        sigma, t, s, u, v, dp, baclin=baclin)
 
 
 
