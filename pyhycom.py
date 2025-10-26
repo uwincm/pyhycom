@@ -1502,6 +1502,44 @@ def mask_bottom(bathy, z_bottom, kdm):
     z_mask = z_mask > 0.5
     return z_mask
 
+def fill_bottom_values(sigma, t, s, u, v,
+    t_bottom, s_bottom, u_bottom, v_bottom,
+    z_bottom, bathy, kdm):
+    """
+    Fill bottom values in HYCOM fields.
+    """
+
+    for k in range(0, kdm):
+        t_2d = t[k,:,:]
+        t_2d[bathy - z_bottom[k,:,:] < 0.0] = t_bottom[bathy - z_bottom[k,:,:] < 0.0]
+        ## Hack to fix some remaining isolated weird values.
+        ## (Presumably at the edges of bathymetry features near the bottom)
+        ## (ALSO DONE FOR S, U, V BELOW!!!)
+        hack_points = t_2d < -100.0
+        t_2d[hack_points] = t_bottom[hack_points]
+        t[k,:,:] = t_2d
+
+        s_2d = s[k,:,:]
+        s_2d[bathy - z_bottom[k,:,:] < 0.0] = s_bottom[bathy - z_bottom[k,:,:] < 0.0]
+        s_2d[hack_points] = s_bottom[hack_points]
+        s[k,:,:] = s_2d
+
+        sigma_2d = sigma[k,:,:]
+        sigma_2d[bathy - z_bottom[k,:,:] < 0.0] = np.nan
+        sigma_2d[hack_points] = np.nan
+        sigma[k,:,:] = sigma_2d
+
+        u_2d = u[k,:,:]
+        u_2d[bathy - z_bottom[k,:,:] < 0.0] = u_bottom[bathy - z_bottom[k,:,:] < 0.0]
+        u_2d[hack_points] = u_bottom[hack_points]
+        u[k,:,:] = u_2d
+
+        v_2d = v[k,:,:]
+        v_2d[bathy - z_bottom[k,:,:] < 0.0] = v_bottom[bathy - z_bottom[k,:,:] < 0.0]
+        v_2d[hack_points] = v_bottom[hack_points]
+        v[k,:,:] = v_2d
+    return sigma, t, s, u, v
+
 
 def ncz2ab(filename,baclin=60,interp=True):
     """
@@ -1676,36 +1714,11 @@ def ncz2ab(filename,baclin=60,interp=True):
     sigma_bottom = sigma2_12term(t_bottom, s_bottom)
 
     ## Fill in bottom values.
-
-    for k in range(0, kdm):
-        t_2d = t[k,:,:]
-        t_2d[bathy - z_bottom[k,:,:] < 0.0] = t_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        ## Hack to fix some remaining isolated weird values.
-        ## (Presumably at the edges of bathymetry features near the bottom)
-        ## (ALSO DONE FOR S, U, V BELOW!!!)
-        hack_points = t_2d < -100.0
-        t_2d[hack_points] = t_bottom[hack_points]
-        t[k,:,:] = t_2d
-
-        s_2d = s[k,:,:]
-        s_2d[bathy - z_bottom[k,:,:] < 0.0] = s_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        s_2d[hack_points] = s_bottom[hack_points]
-        s[k,:,:] = s_2d
-
-        sigma_2d = sigma[k,:,:]
-        sigma_2d[bathy - z_bottom[k,:,:] < 0.0] = np.nan
-        sigma_2d[hack_points] = np.nan
-        sigma[k,:,:] = sigma_2d
-
-        u_2d = u[k,:,:]
-        u_2d[bathy - z_bottom[k,:,:] < 0.0] = u_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        u_2d[hack_points] = u_bottom[hack_points]
-        u[k,:,:] = u_2d
-
-        v_2d = v[k,:,:]
-        v_2d[bathy - z_bottom[k,:,:] < 0.0] = v_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        v_2d[hack_points] = v_bottom[hack_points]
-        v[k,:,:] = v_2d
+    sigma, t, s, u, v = fill_bottom_values(
+        sigma, t, s, u, v,
+        t_bottom, s_bottom, u_bottom, v_bottom,
+        z_bottom, bathy, kdm
+    )
 
     ############################################################################
 
