@@ -1541,6 +1541,104 @@ def fill_bottom_values(sigma, t, s, u, v,
     return sigma, t, s, u, v
 
 
+def process_zlev_data(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
+        steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
+        lon_sur, lat_sur, t, s, u, v, kdm, bathy, baclin=60,interp=True):
+
+    ### Interp if specified.
+
+    if interp:
+        print('Interpolating to regional grid.')
+
+        ## Get regional grid info.
+        grid_lon = getField('plon','regional.grid.a') #+360.0 ## 2-D, not necessarily rectangular.
+        print("Longitude range: ", (np.nanmin(grid_lon)), (np.nanmax(grid_lon)))
+        grid_lat = getField('plat','regional.grid.a') ## 2-D, not necessarily rectangular.
+        print("Latitude range: ", (np.nanmin(grid_lat)), (np.nanmax(grid_lat)))
+
+        ## Do the interp.
+        (ssh, t_bottom, s_bottom, u_bottom, v_bottom, steric, surflx,
+        salflx, bl_dpth, mix_dpth, u_btrop, v_btrop, t, s, u, v
+        ) = do_horizontal_interp(
+            lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
+            steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
+            lon_sur, lat_sur, t, s, u, v, kdm,
+            lonI=grid_lon, latI=grid_lat
+        )
+
+    ## Get Density.
+    sigma = sigma2_12term(t,s)
+
+    ## Gonna need this info below.
+    S = t.shape
+    ny = S[1]
+    nx = S[2]
+
+
+    ###
+    ### Further mask using topo mask.
+    ###
+    ssh = ma.masked_array(ssh, mask=~np.isfinite(bathy))
+    t_bottom = ma.masked_array(t_bottom, mask=~np.isfinite(bathy))
+    s_bottom = ma.masked_array(s_bottom, mask=~np.isfinite(bathy))
+    u_bottom = ma.masked_array(u_bottom, mask=~np.isfinite(bathy))
+    v_bottom = ma.masked_array(v_bottom, mask=~np.isfinite(bathy))
+    steric = ma.masked_array(steric, mask=~np.isfinite(bathy))
+    surflx = ma.masked_array(surflx, mask=~np.isfinite(bathy))
+    salflx = ma.masked_array(salflx, mask=~np.isfinite(bathy))
+    bl_dpth = ma.masked_array(bl_dpth, mask=~np.isfinite(bathy))
+    mix_dpth = ma.masked_array(mix_dpth, mask=~np.isfinite(bathy))
+    u_btrop = ma.masked_array(u_btrop, mask=~np.isfinite(bathy))
+    v_btrop = ma.masked_array(v_btrop, mask=~np.isfinite(bathy))
+
+
+    ###
+    ### Manage layering.
+    ###
+
+    dp, z_bottom = calc_dp(t, s, u, v, z, bathy, kdm, nx, ny)
+
+    ###
+    ### Bottom of the sea mask for 3-D variables.
+    ###
+
+    z_mask = mask_bottom(bathy, z_bottom, kdm)
+
+    dp = ma.masked_array(dp.data,mask=z_mask)
+    t = ma.masked_array(t.data,mask=z_mask)
+    s = ma.masked_array(s.data,mask=z_mask)
+    u = ma.masked_array(u.data,mask=z_mask)
+    v = ma.masked_array(v.data,mask=z_mask)
+    sigma = ma.masked_array(sigma.data,mask=z_mask)
+    sigma_bottom = sigma2_12term(t_bottom, s_bottom)
+
+    ## Fill in bottom values.
+    sigma, t, s, u, v = fill_bottom_values(
+        sigma, t, s, u, v,
+        t_bottom, s_bottom, u_bottom, v_bottom,
+        z_bottom, bathy, kdm
+    )
+
+    ############################################################################
+
+
+    ###
+    ### Write Output.
+    ###
+
+    n_levels = len(z)
+    fn_base = this_datetime.strftime('archv.%Y_%j_%H')
+    print('Saving surface data and {} layers to {}.a and {}.b.'.format(
+        n_levels, fn_base, fn_base)
+    )
+
+    write_zlev_ab_files(fn_base, this_datetime, ssh, steric, surflx, salflx,
+        bl_dpth, mix_dpth, u_btrop, v_btrop,
+        sigma, t, s, u, v, dp, baclin=baclin)
+
+
+
+
 def ncz2ab(filename,baclin=60,interp=True):
     """
     Convert NetCDF z level data from hycom.org in to binary [ab] files
@@ -1645,97 +1743,10 @@ def ncz2ab(filename,baclin=60,interp=True):
     kdm = len(z)
     bathy = getBathymetry('regional.depth.a')
 
-    ###
-    ### Interp if specified.
-
-    if interp:
-        print('Interpolating to regional grid.')
-
-        ## Get regional grid info.
-        grid_lon = getField('plon','regional.grid.a') #+360.0 ## 2-D, not necessarily rectangular.
-        print("Longitude range: ", (np.nanmin(grid_lon)), (np.nanmax(grid_lon)))
-        grid_lat = getField('plat','regional.grid.a') ## 2-D, not necessarily rectangular.
-        print("Latitude range: ", (np.nanmin(grid_lat)), (np.nanmax(grid_lat)))
-
-        ## Do the interp.
-        (ssh, t_bottom, s_bottom, u_bottom, v_bottom, steric, surflx,
-         salflx, bl_dpth, mix_dpth, u_btrop, v_btrop, t, s, u, v
-         ) = do_horizontal_interp(
-            lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
-            steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
-            lon_sur, lat_sur, t, s, u, v, kdm,
-            lonI=grid_lon, latI=grid_lat
-        )
-
-    ## Get Density.
-    sigma = sigma2_12term(t,s)
-
-    ## Gonna need this info below.
-    S = t.shape
-    ny = S[1]
-    nx = S[2]
-
-
-    ###
-    ### Further mask using topo mask.
-    ###
-    ssh = ma.masked_array(ssh, mask=~np.isfinite(bathy))
-    t_bottom = ma.masked_array(t_bottom, mask=~np.isfinite(bathy))
-    s_bottom = ma.masked_array(s_bottom, mask=~np.isfinite(bathy))
-    u_bottom = ma.masked_array(u_bottom, mask=~np.isfinite(bathy))
-    v_bottom = ma.masked_array(v_bottom, mask=~np.isfinite(bathy))
-    steric = ma.masked_array(steric, mask=~np.isfinite(bathy))
-    surflx = ma.masked_array(surflx, mask=~np.isfinite(bathy))
-    salflx = ma.masked_array(salflx, mask=~np.isfinite(bathy))
-    bl_dpth = ma.masked_array(bl_dpth, mask=~np.isfinite(bathy))
-    mix_dpth = ma.masked_array(mix_dpth, mask=~np.isfinite(bathy))
-    u_btrop = ma.masked_array(u_btrop, mask=~np.isfinite(bathy))
-    v_btrop = ma.masked_array(v_btrop, mask=~np.isfinite(bathy))
-
-
-    ###
-    ### Manage layering.
-    ###
-
-    dp, z_bottom = calc_dp(t, s, u, v, z, bathy, kdm, nx, ny)
-
-    ###
-    ### Bottom of the sea mask for 3-D variables.
-    ###
-
-    z_mask = mask_bottom(bathy, z_bottom, kdm)
-
-    dp = ma.masked_array(dp.data,mask=z_mask)
-    t = ma.masked_array(t.data,mask=z_mask)
-    s = ma.masked_array(s.data,mask=z_mask)
-    u = ma.masked_array(u.data,mask=z_mask)
-    v = ma.masked_array(v.data,mask=z_mask)
-    sigma = ma.masked_array(sigma.data,mask=z_mask)
-    sigma_bottom = sigma2_12term(t_bottom, s_bottom)
-
-    ## Fill in bottom values.
-    sigma, t, s, u, v = fill_bottom_values(
-        sigma, t, s, u, v,
-        t_bottom, s_bottom, u_bottom, v_bottom,
-        z_bottom, bathy, kdm
-    )
-
-    ############################################################################
-
-
-    ###
-    ### Write Output.
-    ###
-
-    n_levels = len(z)
-    fn_base = this_datetime.strftime('archv.%Y_%j_%H')
-    print('Saving surface data and {} layers to {}.a and {}.b.'.format(
-        n_levels, fn_base, fn_base)
-    )
-
-    write_zlev_ab_files(fn_base, this_datetime, ssh, steric, surflx, salflx,
-        bl_dpth, mix_dpth, u_btrop, v_btrop,
-        sigma, t, s, u, v, dp, baclin=baclin)
+    # The main processing function.
+    process_zlev_data(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
+        steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
+        lon_sur, lat_sur, t, s, u, v, kdm, bathy, baclin=baclin,interp=interp)
 
 
 
