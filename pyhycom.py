@@ -1494,9 +1494,11 @@ def ncz2ab(filename,baclin=60,interp=True):
         print("Latitude range: ", (np.nanmin(grid_lat)), (np.nanmax(grid_lat)))
 
         ## Do the interp.
-        ssh, t_bottom, s_bottom, u_bottom, v_bottom, steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop, t, s, u, v = do_horizontal_interp(
-            lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom, 
-            steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop, 
+        (ssh, t_bottom, s_bottom, u_bottom, v_bottom, steric, surflx,
+         salflx, bl_dpth, mix_dpth, u_btrop, v_btrop, t, s, u, v
+         ) = do_horizontal_interp(
+            lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
+            steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
             lon_sur, lat_sur, t, s, u, v, kdm,
             lonI=grid_lon, latI=grid_lat
         )
