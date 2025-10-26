@@ -1367,26 +1367,24 @@ def ncz2ab(filename,baclin=60,interp=True):
 
     # SSH
     print(fn_ssh)
-    DS=Dataset(fn_ssh)
-    lon = DS['lon'][:]
-    lat = DS['lat'][:]
-    ssh = DS['surf_el'][:][0]
-    DS.close()
+    with Dataset(fn_ssh) as ds:
+        lon = ds['lon'][:]
+        lat = ds['lat'][:]
+        ssh = ds['surf_el'][:][0]
 
     # Surface
     print(fn_sur)
     if os.path.exists(fn_sur):
-        DS=Dataset(fn_sur)
-        lon_sur = DS['lon'][:]
-        lat_sur = DS['lat'][:]
-        steric = DS['steric_ssh'][:][0]
-        surflx = DS['qtot'][:][0]
-        salflx = DS['emp'][:][0]
-        bl_dpth = DS['surface_boundary_layer_thickness'][:][0]
-        mix_dpth = DS['mixed_layer_thickness'][:][0]
-        u_btrop = DS['u_barotropic_velocity'][:][0]
-        v_btrop = DS['v_barotropic_velocity'][:][0]
-        DS.close()
+        with Dataset(fn_sur) as ds:
+            lon_sur = ds['lon'][:]
+            lat_sur = ds['lat'][:]
+            steric = ds['steric_ssh'][:][0]
+            surflx = ds['qtot'][:][0]
+            salflx = ds['emp'][:][0]
+            bl_dpth = ds['surface_boundary_layer_thickness'][:][0]
+            mix_dpth = ds['mixed_layer_thickness'][:][0]
+            u_btrop = ds['u_barotropic_velocity'][:][0]
+            v_btrop = ds['v_barotropic_velocity'][:][0]
     else:
         print("Warning: No surface file! Setting to zero.")
         lon_sur=1.0*lon
@@ -1401,20 +1399,18 @@ def ncz2ab(filename,baclin=60,interp=True):
 
     ## 3-D Data
     print(fn_ts)
-    DS=Dataset(fn_ts)
-    z = DS['depth'][:]
-    t = DS['water_temp'][:][0]
-    t_bottom = DS['water_temp_bottom'][:][0]
-    s = DS['salinity'][:][0]
-    s_bottom = DS['salinity_bottom'][:][0]
-    DS.close()
+    with Dataset(fn_ts) as ds:
+        z = ds['depth'][:]
+        t = ds['water_temp'][:][0]
+        t_bottom = ds['water_temp_bottom'][:][0]
+        s = ds['salinity'][:][0]
+        s_bottom = ds['salinity_bottom'][:][0]
     print(fn_uv)
-    DS=Dataset(fn_uv)
-    u = DS['water_u'][:][0]
-    u_bottom = DS['water_u_bottom'][:][0]
-    v = DS['water_v'][:][0]
-    v_bottom = DS['water_v_bottom'][:][0]
-    DS.close()
+    with Dataset(fn_uv) as ds:
+        u = ds['water_u'][:][0]
+        u_bottom = ds['water_u_bottom'][:][0]
+        v = ds['water_v'][:][0]
+        v_bottom = ds['water_v_bottom'][:][0]
     kdm = len(z)
     bathy = getBathymetry('regional.depth.a')
 
