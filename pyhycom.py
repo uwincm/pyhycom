@@ -8,6 +8,29 @@ from numpy import ma
 import datetime as dt
 import gzip
 import os
+import re
+
+
+def date_from_filename(filename):
+    """
+    Return a datetime object from a HYCOM archive, restart, or other filename.
+    Example filename: archv.2024_150_12.a or archv.2024_150_12.a.gz
+    2024 is the year, 150 is the day in year, 12 is the hour.
+
+    The function will parse the filename to extract year, day in year, and hour,
+    and return a tuple: (year, day_in_year, hour)
+    """
+    match = re.search(r'(\d{4}_\d{3}_\d{2})', filename)
+    if match:
+        year_day_hour_str = match.group(1)
+        year, day_in_year, hour = map(int, year_day_hour_str.split('_'))
+
+    file_datetime = (dt.datetime(year, 1, 1, 0, 0, 0)
+                     + dt.timedelta(days=day_in_year - 1)
+                     + dt.timedelta(hours=hour))
+
+    return (year, day_in_year, hour, file_datetime)
+
 
 def open_a_file(filename, mode):
     """
