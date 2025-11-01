@@ -690,7 +690,7 @@ def ab2nc(filename):
         nc_field=ncfile.createVariable('Y',datatype='f4',dimensions=('Y')); nc_field[:]=np.arange(jdm)
         for field in fields:
             print('Doing '+field+'.')
-            ab_field=getField(field,filename,np.NaN)
+            ab_field=getField(field,filename,np.nan)
             print('Shape: ' + str(ab_field.shape))
             print('(min, mean, max) = ({0:f}, {1:f}, {2:f})'.format(np.nanmin(ab_field),np.nanmean(ab_field),np.nanmax(ab_field)))
             nc_field=ncfile.createVariable(field,datatype='f4',dimensions=('Y','X'))
@@ -708,8 +708,8 @@ def ab2nc(filename):
             regional_grid_fn = 'regional.grid.b'
         else:
             regional_grid_fn = (os.path.dirname(filename) + '/regional.grid.b')
-        plon=getField('plon',regional_grid_fn,np.NaN)
-        plat=getField('plat',regional_grid_fn,np.NaN)
+        plon=getField('plon',regional_grid_fn,np.nan)
+        plat=getField('plat',regional_grid_fn,np.nan)
 
         bathy = getBathymetry(filename, undef=np.nan)
         S = bathy.shape
@@ -756,8 +756,8 @@ def ab2nc(filename):
             regional_grid_fn = 'regional.grid.b'
         else:
             regional_grid_fn = (os.path.dirname(filename) + '/regional.grid.b')
-        plon=getField('plon',regional_grid_fn,np.NaN)
-        plat=getField('plat',regional_grid_fn,np.NaN)
+        plon=getField('plon',regional_grid_fn,np.nan)
+        plat=getField('plat',regional_grid_fn,np.nan)
         #
         if os.path.dirname(filename) == '':
             regional_depth_fn = 'regional.depth.b'
@@ -829,7 +829,7 @@ def ab2nc(filename):
 
         for field in fields:
             print('Doing '+field+'.')
-            ab_field=getField(field,filename,np.NaN)
+            ab_field=getField(field,filename,np.nan)
             s = ab_field.shape
             print('Shape: ' + str(s))
             print('(min, mean, max) = ({0:f}, {1:f}, {2:f})'.format(np.nanmin(ab_field),np.nanmean(ab_field),np.nanmax(ab_field)))
@@ -947,8 +947,8 @@ def ab2nc(filename):
             regional_grid_fn = 'regional.grid.b'
         else:
             regional_grid_fn = (os.path.dirname(filename) + '/regional.grid.b')
-        plon=getField('plon',regional_grid_fn,np.NaN)
-        plat=getField('plat',regional_grid_fn,np.NaN)
+        plon=getField('plon',regional_grid_fn,np.nan)
+        plat=getField('plat',regional_grid_fn,np.nan)
         #
         ncfn=filename[:-1]+'nc'
         ncfile=Dataset(ncfn,'w',format='NETCDF3_CLASSIC') # Open file
@@ -985,8 +985,8 @@ def ab2nc(filename):
         print('Working on file: '+filename,dims)
         #
         regional_grid_fn = (os.path.dirname(filename) + '/regional.grid.b')
-        plon=getField('plon',regional_grid_fn,np.NaN)
-        plat=getField('plat',regional_grid_fn,np.NaN)
+        plon=getField('plon',regional_grid_fn,np.nan)
+        plat=getField('plat',regional_grid_fn,np.nan)
         #
         ncfn = (filename[0:-2]+'.nc')
         print('Working on',ncfn)
@@ -1028,8 +1028,8 @@ def ab2nc(filename):
             regional_grid_fn = 'regional.grid.b'
         else:
             regional_grid_fn = (os.path.dirname(filename) + '/regional.grid.b')
-        plon=getField('plon',regional_grid_fn,np.NaN)
-        plat=getField('plat',regional_grid_fn,np.NaN)
+        plon=getField('plon',regional_grid_fn,np.nan)
+        plat=getField('plat',regional_grid_fn,np.nan)
         dims = plon.shape
         print('Dims: ', dims)
         jdm = dims[0]
