@@ -4,6 +4,7 @@ pyhycom.py
 A Python interface to HYCOM files.
 """
 import numpy as np
+from numpy import ma
 import datetime as dt
 import gzip
 import os
@@ -652,7 +653,7 @@ def ab2nc(filename):
     """
     A function that converts a given hycom binary .a file into an equivalent .nc file.
 
-    Module requirements: numpy,netCDF4,matplotlib.dates
+    Module requirements: numpy,netCDF4
     """
     #
     import numpy as np
@@ -741,9 +742,6 @@ def ab2nc(filename):
 
 
     elif filename.rfind('arch')>-1:
-        #
-        from matplotlib.dates import num2date
-        #
         # Read archv.b file:
         f = open(get_b_filename(filename), 'r')
         file_content=[line.rstrip() for line in f.readlines()]
@@ -1320,6 +1318,324 @@ def do_interp(lon,lat,data,lonI,latI):
     return dataI
 
 
+def do_horizontal_interp(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
+    steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
+    lon_sur, lat_sur, t, s, u, v, kdm, lonI, latI):
+    """
+    Horizontally interpolate ocean fields to regional grid.
+    
+    Returns tuple of interpolated fields:
+    (ssh, t_bottom, s_bottom, u_bottom, v_bottom, steric, surflx, salflx, 
+        bl_dpth, mix_dpth, u_btrop, v_btrop, t, s, u, v)
+    """
+    
+    ## Interpolate surface/2d fields.
+    print('Interp ssh.')
+    ssh = do_interp(lon, lat, ssh, lonI, latI)
+    print('Interp t_bottom.')
+    t_bottom = do_interp(lon, lat, t_bottom, lonI, latI)
+    print('Interp s_bottom.')
+    s_bottom = do_interp(lon, lat, s_bottom, lonI, latI)
+    print('Interp u_bottom.')
+    u_bottom = do_interp(lon, lat, u_bottom, lonI, latI)
+    print('Interp v_bottom.')
+    v_bottom = do_interp(lon, lat, v_bottom, lonI, latI)
+    print('Interp steric.')
+    steric = do_interp(lon_sur, lat_sur, steric, lonI, latI)
+    print('Interp mixflx.')
+    surflx = do_interp(lon_sur, lat_sur, surflx, lonI, latI)
+    print('Interp salflx.')
+    salflx = do_interp(lon_sur, lat_sur, salflx, lonI, latI)
+    print('Interp bl_dpth.')
+    bl_dpth = do_interp(lon_sur, lat_sur, bl_dpth, lonI, latI)
+    print('Interp mix_dpth.')
+    mix_dpth = do_interp(lon_sur, lat_sur, mix_dpth, lonI, latI)
+    print('u_btrop.')
+    u_btrop = do_interp(lon_sur, lat_sur, u_btrop, lonI, latI)
+    print('v_btrop.')
+    v_btrop = do_interp(lon_sur, lat_sur, v_btrop, lonI, latI)
+
+    ## Now do the 3-D fields.
+    print('Interp 3-D Fields.')
+    SI = ssh.shape
+    tI = np.nan * np.zeros([kdm, SI[0], SI[1]])
+    sI = np.nan * np.zeros([kdm, SI[0], SI[1]])
+    uI = np.nan * np.zeros([kdm, SI[0], SI[1]])
+    vI = np.nan * np.zeros([kdm, SI[0], SI[1]])
+
+    for k in range(kdm):
+        print('--> Level {} of {}.'.format(k+1, kdm))
+        tI[k] = do_interp(lon, lat, t[k, :, :], lonI, latI)
+        sI[k] = do_interp(lon, lat, s[k, :, :], lonI, latI)
+        uI[k] = do_interp(lon, lat, u[k, :, :], lonI, latI)
+        vI[k] = do_interp(lon, lat, v[k, :, :], lonI, latI)
+
+    
+    return (ssh, t_bottom, s_bottom, u_bottom, v_bottom, steric, surflx, salflx,
+            bl_dpth, mix_dpth, u_btrop, v_btrop, tI, sI, uI, vI)
+
+
+def write_zlev_ab_files(fn_base, this_datetime, ssh, steric, surflx, salflx,
+    bl_dpth, mix_dpth, u_btrop, v_btrop,
+    sigma, t, s, u, v, dp, baclin=60):
+    """
+    Write out HYCOM .a and .b files for z-level data.
+    """
+    S = t.shape
+    kdm = S[0]
+    ny = S[1]
+    nx = S[2]
+
+    # Start the files.
+    fna = fn_base + '.a'
+    fnb = fn_base + '.b'
+
+    fileb = open(fnb,'w')
+    fileb.write("0.281c NAVGEM wind, thermal, precip 3-hrly forcing ; LWcorr; GDEM42 SSS relax;\n")
+    fileb.write("17T Sigma2*; GDEM4 Jan init; KPP; SeaWiFS KPAR; HYCOM+CICE; A=20;Smag=.05;\n")
+    fileb.write("Z(7):1-7,Z(16):8,Z(2):10-16,Z(13):dp00/f/x=36/1.18/262;Z(3):400-600m; NOGAPSsnow\n")
+    fileb.write("GLBa0.08 archive subregioned to NWPa0.08\n")
+    fileb.write("   22    'iversn' = hycom version number x10\n")
+    fileb.write("  930    'iexpt ' = experiment number x10\n")
+    fileb.write("    3    'yrflag' = days in year flag\n")
+    fileb.write(" {0:4d}    'idm   ' = longitudinal array size\n".format(nx))
+    fileb.write(" {0:4d}    'jdm   ' = latitudinal  array size\n".format(ny))
+    fileb.write("field       time step  model day  k  dens        min              max")
+    fileb.close()
+
+    filea = open(fna,'wb')
+    filea.close()
+
+    #### Write surface variables.
+    ## First variable is required to be the Montgomery Potential "montg1"
+    ## It looks like HYCOM discards the *values* and will calculate it on its own.
+    ## Therefore, I'm trying a bunch of zeros here!
+    ## For montg1, the equation of state is specified by "k  dens" = sigver  thbase
+    ##   which for global HYCOM is 6, 34.
+    ##   so we need to override k and dens in the "b" file.
+    append_field_to_b_file(fnb,0.0*ssh,-1,'montg1',this_datetime,baclin,34.0,k_override=6)
+    append_field_to_a_file(fna,0.0*ssh,-1)
+
+    ## Surface variables are assigned density of zero.
+    append_field_to_b_file(fnb,(100.0/9.8)*ssh,-1,'srfhgt',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,(100.0/9.8)*ssh,-1)
+    append_field_to_b_file(fnb,(100.0/9.8)*steric,-1,'steric',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,(100.0/9.8)*steric,-1)
+    append_field_to_b_file(fnb,surflx,-1,'surflx',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,surflx,-1)
+    append_field_to_b_file(fnb,salflx,-1,'salflx',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,salflx,-1)
+    append_field_to_b_file(fnb,9806.0*bl_dpth,-1,'bl_dpth',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,9806.0*bl_dpth,-1)
+    append_field_to_b_file(fnb,9806.0*mix_dpth,-1,'mix_dpth',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,9806.0*mix_dpth,-1)
+    append_field_to_b_file(fnb,u_btrop,-1,'u_btrop',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,u_btrop,-1)
+    append_field_to_b_file(fnb,v_btrop,-1,'v_btrop',this_datetime,baclin,0.0)
+    append_field_to_a_file(fna,v_btrop,-1)
+
+    for k in range(0,kdm):
+        sigma_mean = np.nanmean(sigma[k,:,:])
+        append_field_to_b_file(fnb,u,k,'u-vel.',this_datetime,baclin,sigma_mean)
+        append_field_to_a_file(fna,u,k)
+        append_field_to_b_file(fnb,v,k,'v-vel.',this_datetime,baclin,sigma_mean)
+        append_field_to_a_file(fna,v,k)
+        append_field_to_b_file(fnb,dp,k,'thknss',this_datetime,baclin,sigma_mean)
+        append_field_to_a_file(fna,dp,k)
+        append_field_to_b_file(fnb,t,k,'temp',this_datetime,baclin,sigma_mean)
+        append_field_to_a_file(fna,t,k)
+        append_field_to_b_file(fnb,s,k,'salin',this_datetime,baclin,sigma_mean)
+        append_field_to_a_file(fna,s,k)
+
+
+def calc_dp(t, s, u, v, z, bathy, kdm, nx, ny):
+    """
+    Calculate layer thicknesses (dp) based on z-levels and bathymetry.
+    """
+
+    ## Layer Thickness
+    dp = 0.0*t
+    dz = 0.0*t
+    z_bottom = 0.0*t
+    z_top = 0.0*t
+
+    ## treat z=0 as 0 to half of first depth.
+    z_top[0,:,:] = 0.0
+    z_bottom[0,:,:] = 0.5*z[1]
+
+    ## Do the middle
+    for k in range(1, kdm-1):
+        z_top[k,:,:] = 0.5*(z[k] + z[k-1])
+        z_bottom[k,:,:] = 0.5*(z[k] + z[k+1])
+
+    ## Treat last level as half way beteen (kdm-1,kdm) to the bottom.
+    z_top[kdm-1,:,:] = 0.5*(z[kdm-1] + z[kdm-2])
+    z_bottom[kdm-1,:,:] = bathy
+
+    dz = z_bottom - z_top
+
+    ## Refine if I'm near the bottom.
+    for k in range(kdm):
+        for jj in range(ny):
+            for ii in range(nx):
+                if z_top[k,jj,ii] < bathy[jj,ii] and z_bottom[k,jj,ii] > bathy[jj,ii]:
+                    dz[k,jj,ii] = bathy[jj,ii] - z_top[k,jj,ii] + 10.0
+                if z_top[k,jj,ii] > bathy[jj,ii]:
+                    dz[k,jj,ii] = 0.0
+
+    dp = dz * 9806 # meters to pressure.
+
+    return dp, z_bottom
+
+
+def mask_bottom(bathy, z_bottom, kdm):
+    """
+    Create a 3-D mask array where True indicates below bottom.
+    """
+    z_mask = 0.0*z_bottom
+    for k in range(0, kdm):
+        z_mask_2d = 0.0*bathy
+        z_mask_2d[bathy - z_bottom[k,:,:] < 0.0] = 1
+        z_mask[k,:,:] = z_mask_2d
+    z_mask = z_mask > 0.5
+    return z_mask
+
+def fill_bottom_values(sigma, t, s, u, v,
+    t_bottom, s_bottom, u_bottom, v_bottom,
+    z_bottom, bathy, kdm):
+    """
+    Fill bottom values in HYCOM fields.
+    """
+
+    for k in range(0, kdm):
+        t_2d = t[k,:,:]
+        t_2d[bathy - z_bottom[k,:,:] < 0.0] = t_bottom[bathy - z_bottom[k,:,:] < 0.0]
+        ## Hack to fix some remaining isolated weird values.
+        ## (Presumably at the edges of bathymetry features near the bottom)
+        ## (ALSO DONE FOR S, U, V BELOW!!!)
+        hack_points = t_2d < -100.0
+        t_2d[hack_points] = t_bottom[hack_points]
+        t[k,:,:] = t_2d
+
+        s_2d = s[k,:,:]
+        s_2d[bathy - z_bottom[k,:,:] < 0.0] = s_bottom[bathy - z_bottom[k,:,:] < 0.0]
+        s_2d[hack_points] = s_bottom[hack_points]
+        s[k,:,:] = s_2d
+
+        sigma_2d = sigma[k,:,:]
+        sigma_2d[bathy - z_bottom[k,:,:] < 0.0] = np.nan
+        sigma_2d[hack_points] = np.nan
+        sigma[k,:,:] = sigma_2d
+
+        u_2d = u[k,:,:]
+        u_2d[bathy - z_bottom[k,:,:] < 0.0] = u_bottom[bathy - z_bottom[k,:,:] < 0.0]
+        u_2d[hack_points] = u_bottom[hack_points]
+        u[k,:,:] = u_2d
+
+        v_2d = v[k,:,:]
+        v_2d[bathy - z_bottom[k,:,:] < 0.0] = v_bottom[bathy - z_bottom[k,:,:] < 0.0]
+        v_2d[hack_points] = v_bottom[hack_points]
+        v[k,:,:] = v_2d
+    return sigma, t, s, u, v
+
+
+def process_zlev_data(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
+        steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
+        lon_sur, lat_sur, t, s, u, v, z, kdm, bathy, this_datetime,
+        baclin=60,interp=True):
+
+    ### Interp if specified.
+
+    if interp:
+        print('Interpolating to regional grid.')
+
+        ## Get regional grid info.
+        grid_lon = getField('plon','regional.grid.a') #+360.0 ## 2-D, not necessarily rectangular.
+        print("Longitude range: ", (np.nanmin(grid_lon)), (np.nanmax(grid_lon)))
+        grid_lat = getField('plat','regional.grid.a') ## 2-D, not necessarily rectangular.
+        print("Latitude range: ", (np.nanmin(grid_lat)), (np.nanmax(grid_lat)))
+
+        ## Do the interp.
+        (ssh, t_bottom, s_bottom, u_bottom, v_bottom, steric, surflx,
+        salflx, bl_dpth, mix_dpth, u_btrop, v_btrop, t, s, u, v
+        ) = do_horizontal_interp(
+            lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
+            steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
+            lon_sur, lat_sur, t, s, u, v, kdm,
+            lonI=grid_lon, latI=grid_lat
+        )
+
+    ## Get Density.
+    sigma = sigma2_12term(t,s)
+
+    ## Gonna need this info below.
+    S = t.shape
+    ny = S[1]
+    nx = S[2]
+
+
+    ###
+    ### Further mask using topo mask.
+    ###
+    ssh = ma.masked_array(ssh, mask=~np.isfinite(bathy))
+    t_bottom = ma.masked_array(t_bottom, mask=~np.isfinite(bathy))
+    s_bottom = ma.masked_array(s_bottom, mask=~np.isfinite(bathy))
+    u_bottom = ma.masked_array(u_bottom, mask=~np.isfinite(bathy))
+    v_bottom = ma.masked_array(v_bottom, mask=~np.isfinite(bathy))
+    steric = ma.masked_array(steric, mask=~np.isfinite(bathy))
+    surflx = ma.masked_array(surflx, mask=~np.isfinite(bathy))
+    salflx = ma.masked_array(salflx, mask=~np.isfinite(bathy))
+    bl_dpth = ma.masked_array(bl_dpth, mask=~np.isfinite(bathy))
+    mix_dpth = ma.masked_array(mix_dpth, mask=~np.isfinite(bathy))
+    u_btrop = ma.masked_array(u_btrop, mask=~np.isfinite(bathy))
+    v_btrop = ma.masked_array(v_btrop, mask=~np.isfinite(bathy))
+
+
+    ###
+    ### Manage layering.
+    ###
+
+    dp, z_bottom = calc_dp(t, s, u, v, z, bathy, kdm, nx, ny)
+
+    ###
+    ### Bottom of the sea mask for 3-D variables.
+    ###
+
+    z_mask = mask_bottom(bathy, z_bottom, kdm)
+
+    dp = ma.masked_array(dp.data,mask=z_mask)
+    t = ma.masked_array(t.data,mask=z_mask)
+    s = ma.masked_array(s.data,mask=z_mask)
+    u = ma.masked_array(u.data,mask=z_mask)
+    v = ma.masked_array(v.data,mask=z_mask)
+    sigma = ma.masked_array(sigma.data,mask=z_mask)
+    sigma_bottom = sigma2_12term(t_bottom, s_bottom)
+
+    ## Fill in bottom values.
+    sigma, t, s, u, v = fill_bottom_values(
+        sigma, t, s, u, v,
+        t_bottom, s_bottom, u_bottom, v_bottom,
+        z_bottom, bathy, kdm
+    )
+
+    ############################################################################
+
+
+    ###
+    ### Write Output.
+    ###
+
+    n_levels = len(z)
+    fn_base = this_datetime.strftime('archv.%Y_%j_%H.zlev')
+    print('Saving surface data and {} layers to {}.a and {}.b.'.format(
+        n_levels, fn_base, fn_base)
+    )
+
+    write_zlev_ab_files(fn_base, this_datetime, ssh, steric, surflx, salflx,
+        bl_dpth, mix_dpth, u_btrop, v_btrop,
+        sigma, t, s, u, v, dp, baclin=baclin)
+
+
 
 
 def ncz2ab(filename,baclin=60,interp=True):
@@ -1342,7 +1658,6 @@ def ncz2ab(filename,baclin=60,interp=True):
     from scipy.interpolate import LinearNDInterpolator
     from scipy.interpolate import RectBivariateSpline
     from numpy import ma
-    import matplotlib.pyplot as plt
     import os.path
 
 
@@ -1426,245 +1741,128 @@ def ncz2ab(filename,baclin=60,interp=True):
     kdm = len(z)
     bathy = getBathymetry('regional.depth.a')
 
-    ###
-    ### Interp if specified.
-    ###
-    if interp:
-
-        lonI = getField('plon','regional.grid.a') #+360.0 ## 2-D, not necessarily rectangular.
-        latI = getField('plat','regional.grid.a') ## 2-D, not necessarily rectangular.
-        print(np.nanmax(lonI))
-        ## Interpolate surface/2d fields.
-        print('Interp ssh.')
-        ssh = do_interp(lon,lat,ssh,lonI,latI)
-        print('Interp t_bottom.')
-        t_bottom = do_interp(lon,lat,t_bottom,lonI,latI)
-        print('Interp s_bottom.')
-        s_bottom = do_interp(lon,lat,s_bottom,lonI,latI)
-        print('Interp u_bottom.')
-        u_bottom = do_interp(lon,lat,u_bottom,lonI,latI)
-        print('Interp v_bottom.')
-        v_bottom = do_interp(lon,lat,v_bottom,lonI,latI)
-        print('Interp steric.')
-        steric = do_interp(lon_sur,lat_sur,steric,lonI,latI)
-        print('Interp mixflx.')
-        surflx = do_interp(lon_sur,lat_sur,surflx,lonI,latI)
-        print('Interp salflx.')
-        salflx = do_interp(lon_sur,lat_sur,salflx,lonI,latI)
-        print('Interp bl_dpth.')
-        bl_dpth = do_interp(lon_sur,lat_sur,bl_dpth,lonI,latI)
-        print('Interp mix_dpth.')
-        mix_dpth = do_interp(lon_sur,lat_sur,mix_dpth,lonI,latI)
-        print('u_btrop.')
-        u_btrop = do_interp(lon_sur,lat_sur,u_btrop,lonI,latI)
-        print('v_btrop.')
-        v_btrop = do_interp(lon_sur,lat_sur,v_btrop,lonI,latI)
-
-        ## Now do the 3-D fields.
-        print('Interp 3-D Fields.')
-        SI = ssh.shape
-        tI = np.nan*np.zeros([kdm,SI[0],SI[1]])
-        sI = np.nan*np.zeros([kdm,SI[0],SI[1]])
-        uI = np.nan*np.zeros([kdm,SI[0],SI[1]])
-        vI = np.nan*np.zeros([kdm,SI[0],SI[1]])
-
-        for k in range(kdm):
-            print('--> Level {} of {}.'.format(k+1,kdm))
-            tI[k] = do_interp(lon,lat,t[k,:,:],lonI,latI)
-            sI[k] = do_interp(lon,lat,s[k,:,:],lonI,latI)
-            uI[k] = do_interp(lon,lat,u[k,:,:],lonI,latI)
-            vI[k] = do_interp(lon,lat,v[k,:,:],lonI,latI)
-
-        t = tI.copy()
-        s = sI.copy()
-        u = uI.copy()
-        v = vI.copy()
-
-    ## Get Density.
-    sigma = sigma2_12term(t,s)
-
-    ## Gonna need this info below.
-    S = t.shape
-    ny = S[1]
-    nx = S[2]
+    # The main processing function.
+    process_zlev_data(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
+        steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
+        lon_sur, lat_sur, t, s, u, v, z, kdm, bathy, this_datetime,
+        baclin=baclin,interp=interp)
 
 
-    ###
-    ### Further mask using topo mask.
-    ###
-    ssh = ma.masked_array(ssh, mask=~np.isfinite(bathy))
-    t_bottom = ma.masked_array(t_bottom, mask=~np.isfinite(bathy))
-    s_bottom = ma.masked_array(s_bottom, mask=~np.isfinite(bathy))
-    u_bottom = ma.masked_array(u_bottom, mask=~np.isfinite(bathy))
-    v_bottom = ma.masked_array(v_bottom, mask=~np.isfinite(bathy))
-    steric = ma.masked_array(steric, mask=~np.isfinite(bathy))
-    surflx = ma.masked_array(surflx, mask=~np.isfinite(bathy))
-    salflx = ma.masked_array(salflx, mask=~np.isfinite(bathy))
-    bl_dpth = ma.masked_array(bl_dpth, mask=~np.isfinite(bathy))
-    mix_dpth = ma.masked_array(mix_dpth, mask=~np.isfinite(bathy))
-    u_btrop = ma.masked_array(u_btrop, mask=~np.isfinite(bathy))
-    v_btrop = ma.masked_array(v_btrop, mask=~np.isfinite(bathy))
+
+def mercator_z2ab(filename,baclin=60,interp=True):
+    """
+    Convert NetCDF z level data from Copernicus Mercator to binary [ab] files
+    so they can be used with "remaph" to generate hybrid layer data.
+
+    filename can be any of the files, the function will use the path to search
+    for a set of file like this:
+    analysis_2025_10_22_00z_bottom.nc  analysis_2025_10_22_00z_surface.nc
+    analysis_2025_10_22_00z_so.nc      analysis_2025_10_22_00z_thetao.nc
+    analysis_2025_10_22_00z_steric.nc  analysis_2025_10_22_00z_uovo.nc
+
+    interp=True    | Interp horizontally to regional.grid.[ab].
+    interp=False   | Do not interp. May crash if regional.depth.[ab] is inconsistent size.
+    Interpolation is 2-D bilinear, level by level.
+
+    NOTE: There is no u, v bottom, so the bottom values are taken
+          from the last level of u, v.
+    """
+    import datetime as dt
+    from netCDF4 import Dataset
+    from scipy.interpolate import LinearNDInterpolator
+    from scipy.interpolate import RectBivariateSpline
+    from numpy import ma
+    import os.path
 
 
-    ###
-    ### Manage layering.
-    ###
 
-    ## Layer Thickness
-    dp = 0.0*t
-    dz = 0.0*t
-    z_bottom = 0.0*t
-    z_top = 0.0*t
-    z_mask = 0.0*t
+    ## Get the file names.
+    last_part = filename.split('_')[-1]
+    fn_partial = filename[0:-1*len(last_part)-1]
+    fn_sur = (fn_partial + '_surface.nc')
+    fn_bot = (fn_partial + '_bottom.nc')
+    fn_tt = (fn_partial + '_thetao.nc')
+    fn_so = (fn_partial + '_so.nc')
+    fn_uv = (fn_partial + '_uovo.nc')
 
+    # Get time step and day.
+    yyyy = fn_partial.split('_')[1]
+    mm = fn_partial.split('_')[2]
+    dd = fn_partial.split('_')[3]
+    hh = fn_partial.split('_')[4][0:2]
 
-    ## treat z=0 as 0 to half of first depth.
-    z_top[0,:,:] = 0.0
-    z_bottom[0,:,:] = 0.5*z[1]
+    ymdh = yyyy + mm + dd + hh
+    this_datetime = dt.datetime.strptime(ymdh,'%Y%m%d%H') 
+    print(this_datetime)
 
-    ## Do the middle
-    for k in range(1, kdm-1):
-        z_top[k,:,:] = 0.5*(z[k] + z[k-1])
-        z_bottom[k,:,:] = 0.5*(z[k] + z[k+1])
+    # SSH
+    print(fn_sur)
+    try:
+        with Dataset(fn_sur) as ds:
+            lon = ds['longitude'][:]
+            lat = ds['latitude'][:]
+            ssh = ds['zos'][0][0][:]
+            u_btrop = ds['uo'][0][0][:]
+            v_btrop = ds['vo'][0][0][:]
+    except Exception as e:
+        print(f"Error reading surface file {fn_sur}: {e}")
 
-    ## Treat last level as half way beteen (kdm-1,kdm) to the bottom.
-    z_top[kdm-1,:,:] = 0.5*(z[kdm-1] + z[kdm-2])
-    z_bottom[kdm-1,:,:] = bathy
-
-    dz = z_bottom - z_top
-
-    ## Refine if I'm near the bottom.
-    for k in range(kdm):
-        for jj in range(ny):
-            for ii in range(nx):
-                if z_top[k,jj,ii] < bathy[jj,ii] and z_bottom[k,jj,ii] > bathy[jj,ii]:
-                    dz[k,jj,ii] = bathy[jj,ii] - z_top[k,jj,ii] + 10.0
-                if z_top[k,jj,ii] > bathy[jj,ii]:
-                    dz[k,jj,ii] = 0.0
-
-    dp = dz * 9806 # meters to pressure.
-
-    ###
-    ### Bottom of the sea mask for 3-D variables.
-    ###
-
-    for k in range(0, kdm):
-        z_mask_2d = 0.0*bathy
-        z_mask_2d[~np.isfinite(bathy)] = 1
-        z_mask[k,:,:] = z_mask_2d
-    z_mask = z_mask > 0.5
-
-    dp = ma.masked_array(dp.data,mask=z_mask)
-    t = ma.masked_array(t.data,mask=z_mask)
-    s = ma.masked_array(s.data,mask=z_mask)
-    u = ma.masked_array(u.data,mask=z_mask)
-    v = ma.masked_array(v.data,mask=z_mask)
-    sigma = ma.masked_array(sigma.data,mask=z_mask)
-    sigma_bottom = sigma2_12term(t_bottom, s_bottom)
-
-    ## Fill in bottom values.
-
-    for k in range(0, kdm):
-        t_2d = t[k,:,:]
-        t_2d[bathy - z_bottom[k,:,:] < 0.0] = t_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        ## Hack to fix some remaining isolated weird values.
-        ## (Presumably at the edges of bathymetry features near the bottom)
-        ## (ALSO DONE FOR S, U, V BELOW!!!)
-        hack_points = t_2d < -100.0
-        t_2d[hack_points] = t_bottom[hack_points]
-        t[k,:,:] = t_2d
-
-        s_2d = s[k,:,:]
-        s_2d[bathy - z_bottom[k,:,:] < 0.0] = s_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        s_2d[hack_points] = s_bottom[hack_points]
-        s[k,:,:] = s_2d
-
-        sigma_2d = sigma[k,:,:]
-        sigma_2d[bathy - z_bottom[k,:,:] < 0.0] = np.nan
-        sigma_2d[hack_points] = np.nan
-        sigma[k,:,:] = sigma_2d
-
-        u_2d = u[k,:,:]
-        u_2d[bathy - z_bottom[k,:,:] < 0.0] = u_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        u_2d[hack_points] = u_bottom[hack_points]
-        u[k,:,:] = u_2d
-
-        v_2d = v[k,:,:]
-        v_2d[bathy - z_bottom[k,:,:] < 0.0] = v_bottom[bathy - z_bottom[k,:,:] < 0.0]
-        v_2d[hack_points] = v_bottom[hack_points]
-        v[k,:,:] = v_2d
-
-    ############################################################################
-
-    n_levels = len(z)
-    print('Saving surface data and {} layers.'.format(n_levels))
-
-    ###
-    ### Write Output.
-    ###
-
-    # Start the files.
-    fna = this_datetime.strftime('archv.%Y_%j_%H.a')
-    fnb = this_datetime.strftime('archv.%Y_%j_%H.b')
-
-    fileb = open(fnb,'w')
-    fileb.write("0.281c NAVGEM wind, thermal, precip 3-hrly forcing ; LWcorr; GDEM42 SSS relax;\n")
-    fileb.write("17T Sigma2*; GDEM4 Jan init; KPP; SeaWiFS KPAR; HYCOM+CICE; A=20;Smag=.05;\n")
-    fileb.write("Z(7):1-7,Z(16):8,Z(2):10-16,Z(13):dp00/f/x=36/1.18/262;Z(3):400-600m; NOGAPSsnow\n")
-    fileb.write("GLBa0.08 archive subregioned to NWPa0.08\n")
-    fileb.write("   22    'iversn' = hycom version number x10\n")
-    fileb.write("  930    'iexpt ' = experiment number x10\n")
-    fileb.write("    3    'yrflag' = days in year flag\n")
-    fileb.write(" {0:4d}    'idm   ' = longitudinal array size\n".format(nx))
-    fileb.write(" {0:4d}    'jdm   ' = latitudinal  array size\n".format(ny))
-    fileb.write("field       time step  model day  k  dens        min              max")
-    fileb.close()
-
-    filea = open(fna,'wb')
-    filea.close()
-
-    #### Write surface variables.
-    ## First variable is required to be the Montgomery Potential "montg1"
-    ## It looks like HYCOM discards the *values* and will calculate it on its own.
-    ## Therefore, I'm trying a bunch of zeros here!
-    ## For montg1, the equation of state is specified by "k  dens" = sigver  thbase
-    ##   which for global HYCOM is 6, 34.
-    ##   so we need to override k and dens in the "b" file.
-    append_field_to_b_file(fnb,0.0*ssh,-1,'montg1',this_datetime,baclin,34.0,k_override=6)
-    append_field_to_a_file(fna,0.0*ssh,-1)
-
-    ## Surface variables are assigned density of zero.
-    append_field_to_b_file(fnb,(100.0/9.8)*ssh,-1,'srfhgt',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,(100.0/9.8)*ssh,-1)
-    append_field_to_b_file(fnb,(100.0/9.8)*steric,-1,'steric',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,(100.0/9.8)*steric,-1)
-    append_field_to_b_file(fnb,surflx,-1,'surflx',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,surflx,-1)
-    append_field_to_b_file(fnb,salflx,-1,'salflx',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,salflx,-1)
-    append_field_to_b_file(fnb,9806.0*bl_dpth,-1,'bl_dpth',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,9806.0*bl_dpth,-1)
-    append_field_to_b_file(fnb,9806.0*mix_dpth,-1,'mix_dpth',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,9806.0*mix_dpth,-1)
-    append_field_to_b_file(fnb,u_btrop,-1,'u_btrop',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,u_btrop,-1)
-    append_field_to_b_file(fnb,v_btrop,-1,'v_btrop',this_datetime,baclin,0.0)
-    append_field_to_a_file(fna,v_btrop,-1)
-
-    for k in range(0,40):
-        sigma_mean = np.nanmean(sigma[k,:,:])
-        append_field_to_b_file(fnb,u,k,'u-vel.',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,u,k)
-        append_field_to_b_file(fnb,v,k,'v-vel.',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,v,k)
-        append_field_to_b_file(fnb,dp,k,'thknss',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,dp,k)
-        append_field_to_b_file(fnb,t,k,'temp',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,t,k)
-        append_field_to_b_file(fnb,s,k,'salin',this_datetime,baclin,sigma_mean)
-        append_field_to_a_file(fna,s,k)
+    lon_sur=1.0*lon
+    lat_sur=1.0*lat
+    steric=0.0*ssh
+    surflx=0.0*ssh
+    salflx=0.0*ssh
+    bl_dpth=0.0*ssh
+    mix_dpth=0.0*ssh
 
 
+    ## 3-D Data
+    print(fn_tt)
+    try:
+        with Dataset(fn_tt) as ds:
+            z = ds['depth'][:-1]
+            t = ds['thetao'][0][:-1,:,:]
+    except Exception as e:
+        print(f"Error reading thetao file {fn_tt}: {e}")
+
+    print(fn_so)
+    try:
+        with Dataset(fn_so) as ds:
+            s = ds['so'][0][:-1,:,:]
+    except Exception as e:
+        print(f"Error reading so file {fn_so}: {e}")
+
+    print(fn_uv)
+    try:
+        with Dataset(fn_uv) as ds:
+            u = ds['uo'][0][:-1,:,:]
+            v = ds['vo'][0][:-1,:,:]
+            # Use last level of u,v as bottom values.
+            u_bottom = ds['uo'][0][-1,:,:]
+            v_bottom = ds['vo'][0][-1,:,:]
+    except Exception as e:
+        print(f"Error reading uv file {fn_uv}: {e}")
+
+    print(fn_bot)
+    try:
+        with Dataset(fn_bot) as ds:
+            t_bottom = ds['tob'][0][:]
+            s_bottom = ds['sob'][0][:]
+    except Exception as e:
+        print(f"Error reading bottom file {fn_bot}: {e}")
+
+
+    kdm = len(z)
+
+    # Get bathymetry
+    # Need regional.depth in the same directory.
+    bathy = getBathymetry('regional.depth.a')
+
+    # The main processing function.
+    process_zlev_data(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
+        steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
+        lon_sur, lat_sur, t, s, u, v, z, kdm, bathy, this_datetime,
+        baclin=baclin,interp=interp)
 
 
 ########################################################################
