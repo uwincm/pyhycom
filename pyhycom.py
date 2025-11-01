@@ -1626,7 +1626,7 @@ def process_zlev_data(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
     ###
 
     n_levels = len(z)
-    fn_base = this_datetime.strftime('archv.%Y_%j_%H')
+    fn_base = this_datetime.strftime('archv.%Y_%j_%H.zlev')
     print('Saving surface data and {} layers to {}.a and {}.b.'.format(
         n_levels, fn_base, fn_base)
     )
