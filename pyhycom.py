@@ -4,6 +4,7 @@ pyhycom.py
 A Python interface to HYCOM files.
 """
 import numpy as np
+from numpy import ma
 import datetime as dt
 import gzip
 import os
