@@ -792,19 +792,10 @@ def ab2nc(filename):
         # (This is no longer used for output file name,
         #  but may be used for adding a NetCDF timestamp.
         #
-        if '.gz' in filename:
-            day_in_year=int(filename[-11:-8])
-            hour=int(filename[-7:-5])
-            year=int(filename[-16:-12])
-        else:
-            day_in_year=int(filename[-8:-5])
-            hour=int(filename[-4:-2])
-            year=int(filename[-13:-9])
-        #
-        ncfn_datetime = (dt.datetime(year,1,1,0,0,0)
-            + dt.timedelta(days=day_in_year-1)
-            + dt.timedelta(hours=hour))
-        ncfn_timestamp = (ncfn_datetime - dt.datetime(1970,1,1,0,0,0)).total_seconds()/3600.0
+        year, day_in_year, hour, ncfn_datetime = date_from_filename(filename)
+        ncfn_timestamp = (
+            ncfn_datetime - dt.datetime(1970,1,1,0,0,0)
+            ).total_seconds()/3600.0
         #
         if '.gz' in filename:
             ncfn = (filename[0:-5]+'.nc')
