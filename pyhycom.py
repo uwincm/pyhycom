@@ -652,7 +652,7 @@ def ab2nc(filename):
     """
     A function that converts a given hycom binary .a file into an equivalent .nc file.
 
-    Module requirements: numpy,netCDF4,matplotlib.dates
+    Module requirements: numpy,netCDF4
     """
     #
     import numpy as np
@@ -741,9 +741,6 @@ def ab2nc(filename):
 
 
     elif filename.rfind('arch')>-1:
-        #
-        from matplotlib.dates import num2date
-        #
         # Read archv.b file:
         f = open(get_b_filename(filename), 'r')
         file_content=[line.rstrip() for line in f.readlines()]
@@ -1659,7 +1656,6 @@ def ncz2ab(filename,baclin=60,interp=True):
     from scipy.interpolate import LinearNDInterpolator
     from scipy.interpolate import RectBivariateSpline
     from numpy import ma
-    import matplotlib.pyplot as plt
     import os.path
 
 
@@ -1773,7 +1769,6 @@ def mercator_z2ab(filename,baclin=60,interp=True):
     from scipy.interpolate import LinearNDInterpolator
     from scipy.interpolate import RectBivariateSpline
     from numpy import ma
-    import matplotlib.pyplot as plt
     import os.path
 
 
