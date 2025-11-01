@@ -1750,6 +1750,122 @@ def ncz2ab(filename,baclin=60,interp=True):
 
 
 
+def mercator_z2ab(filename,baclin=60,interp=True):
+    """
+    Convert NetCDF z level data from Copernicus Mercator to binary [ab] files
+    so they can be used with "remaph" to generate hybrid layer data.
+
+    filename can be any of the files, the function will use the path to search
+    for a set of file like this:
+    analysis_2025_10_22_00z_bottom.nc  analysis_2025_10_22_00z_surface.nc
+    analysis_2025_10_22_00z_so.nc      analysis_2025_10_22_00z_thetao.nc
+    analysis_2025_10_22_00z_steric.nc  analysis_2025_10_22_00z_uovo.nc
+
+    interp=True    | Interp horizontally to regional.grid.[ab].
+    interp=False   | Do not interp. May crash if regional.depth.[ab] is inconsistent size.
+    Interpolation is 2-D bilinear, level by level.
+
+    NOTE: There is no u, v bottom, so the bottom values are taken
+          from the last level of u, v.
+    """
+    import datetime as dt
+    from netCDF4 import Dataset
+    from scipy.interpolate import LinearNDInterpolator
+    from scipy.interpolate import RectBivariateSpline
+    from numpy import ma
+    import matplotlib.pyplot as plt
+    import os.path
+
+
+
+    ## Get the file names.
+    last_part = filename.split('_')[-1]
+    fn_partial = filename[0:-1*len(last_part)-1]
+    fn_sur = (fn_partial + '_surface.nc')
+    fn_bot = (fn_partial + '_bottom.nc')
+    fn_tt = (fn_partial + '_thetao.nc')
+    fn_so = (fn_partial + '_so.nc')
+    fn_uv = (fn_partial + '_uovo.nc')
+
+    # Get time step and day.
+    yyyy = fn_partial.split('_')[1]
+    mm = fn_partial.split('_')[2]
+    dd = fn_partial.split('_')[3]
+    hh = fn_partial.split('_')[4][0:2]
+
+    ymdh = yyyy + mm + dd + hh
+    this_datetime = dt.datetime.strptime(ymdh,'%Y%m%d%H') 
+    print(this_datetime)
+
+    # SSH
+    print(fn_sur)
+    try:
+        with Dataset(fn_sur) as ds:
+            lon = ds['longitude'][:]
+            lat = ds['latitude'][:]
+            ssh = ds['zos'][0][0][:]
+            u_btrop = ds['uo'][0][0][:]
+            v_btrop = ds['vo'][0][0][:]
+    except Exception as e:
+        print(f"Error reading surface file {fn_sur}: {e}")
+
+    lon_sur=1.0*lon
+    lat_sur=1.0*lat
+    steric=0.0*ssh
+    surflx=0.0*ssh
+    salflx=0.0*ssh
+    bl_dpth=0.0*ssh
+    mix_dpth=0.0*ssh
+
+
+    ## 3-D Data
+    print(fn_tt)
+    try:
+        with Dataset(fn_tt) as ds:
+            z = ds['depth'][:-1]
+            t = ds['thetao'][0][:-1,:,:]
+    except Exception as e:
+        print(f"Error reading thetao file {fn_tt}: {e}")
+
+    print(fn_so)
+    try:
+        with Dataset(fn_so) as ds:
+            s = ds['so'][0][:-1,:,:]
+    except Exception as e:
+        print(f"Error reading so file {fn_so}: {e}")
+
+    print(fn_uv)
+    try:
+        with Dataset(fn_uv) as ds:
+            u = ds['uo'][0][:-1,:,:]
+            v = ds['vo'][0][:-1,:,:]
+            # Use last level of u,v as bottom values.
+            u_bottom = ds['uo'][0][-1,:,:]
+            v_bottom = ds['vo'][0][-1,:,:]
+    except Exception as e:
+        print(f"Error reading uv file {fn_uv}: {e}")
+
+    print(fn_bot)
+    try:
+        with Dataset(fn_bot) as ds:
+            t_bottom = ds['tob'][0][:]
+            s_bottom = ds['sob'][0][:]
+    except Exception as e:
+        print(f"Error reading bottom file {fn_bot}: {e}")
+
+
+    kdm = len(z)
+
+    # Get bathymetry
+    # Need regional.depth in the same directory.
+    bathy = getBathymetry('regional.depth.a')
+
+    # The main processing function.
+    process_zlev_data(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
+        steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
+        lon_sur, lat_sur, t, s, u, v, kdm, bathy, baclin=baclin,interp=interp)
+
+
 ########################################################################
 ############### Derived thermodynamics functions #######################
 ########################################################################
