@@ -1541,7 +1541,7 @@ def fill_bottom_values(sigma, t, s, u, v,
 
 def process_zlev_data(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
         steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
-        lon_sur, lat_sur, t, s, u, v, kdm, bathy, baclin=60,interp=True):
+        lon_sur, lat_sur, t, s, u, v, z, kdm, bathy, baclin=60,interp=True):
 
     ### Interp if specified.
 
@@ -1743,7 +1743,7 @@ def ncz2ab(filename,baclin=60,interp=True):
     # The main processing function.
     process_zlev_data(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
         steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
-        lon_sur, lat_sur, t, s, u, v, kdm, bathy, baclin=baclin,interp=interp)
+        lon_sur, lat_sur, t, s, u, v, z, kdm, bathy, baclin=baclin,interp=interp)
 
 
 
@@ -1859,7 +1859,7 @@ def mercator_z2ab(filename,baclin=60,interp=True):
     # The main processing function.
     process_zlev_data(lon, lat, ssh, t_bottom, s_bottom, u_bottom, v_bottom,
         steric, surflx, salflx, bl_dpth, mix_dpth, u_btrop, v_btrop,
-        lon_sur, lat_sur, t, s, u, v, kdm, bathy, baclin=baclin,interp=interp)
+        lon_sur, lat_sur, t, s, u, v, z, kdm, bathy, baclin=baclin,interp=interp)
 
 
 ########################################################################
