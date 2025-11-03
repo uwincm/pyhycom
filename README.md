@@ -1,4 +1,4 @@
-# pyhycom
+# pyhycom (v1.0)
 PYTHON Interface for HYCOM
 
 Originally written by Milan Curcic (University of Miami).
@@ -13,12 +13,34 @@ https://orca.atmos.washington.edu/~bkerns/code/pyhycom/data/
 Many of the functions require regional.grid.[ab] to be present
 in the same directory.
 
-Update April 2020: The functions can now handle gzipped .a files (.a.gz).
+There is a main function which converts .ab files to NetCDF (see V1.0 update below).
+
+
+## Updates 
+
+### April 2020
+The functions can now handle gzipped .a files (.a.gz).
 Pass them to the functions as you would .a files.
+
+### Update November 2025 (Version 1.0)
+The code can now be installed using pip, so it no longer needs to be copied
+to each directory where it is used. It is recommended to first install a
+Conda environment that has the dependencies (Numpy and Netcdf4), then install
+pyhycom using pip, like this: 
+```
+pip install git+https://github.com/uwincm/pyhycom.git
+```
+After doing this:
+- pyhycom can be imported as before, using `import pyhycom`.
+- Convert .ab files to NetCDF like `python -m pyhycom archv.2025_305_00.zlev.a`. 
+
+
+## Functions
 
 In the code, the functions have a documentaton section near the top.
 These documentation sections are reproduced below for the main functions.
 Note that filename is generally the .a (or .a.gz) file.
+
 
 ```Python
 def getDims(filename):
